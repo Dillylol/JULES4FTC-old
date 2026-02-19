@@ -24,7 +24,7 @@ public class PartDiagnosticTeleOp extends OpMode {
     // Arrays for selection
     private final String[] driveMotors = { "FL", "FR", "BL", "BR" };
     private final String[] subMotors = { "Intake", "Wheel 1", "Wheel 2", "Turret" };
-    private final String[] servos = { "Boot", "Grip 1", "Grip 2", "Brake 1", "Brake 2", "LED 1", "LED 2" };
+    private final String[] servos = { "Grip 1", "Grip 2", "Brake 1", "Brake 2", "LED 1", "LED 2" };
 
     @Override
     public void init() {
@@ -169,12 +169,7 @@ public class PartDiagnosticTeleOp extends OpMode {
         double pos = (input + 1.0) / 2.0; // -1..1 -> 0..1
 
         switch (selectedIndex) {
-            case 0: // Boot
-                if (hardware.boot != null) {
-                    telemetry.addData("Boot Pos", "%.2f (Triggers -1..1 mapped to 0..1)", pos);
-                    hardware.boot.setPosition(pos);
-                }
-                break;
+
             case 1: // Grip 1 (CR)
                 if (hardware.grip1 != null) {
                     telemetry.addData("Grip 1 Power", "%.2f", input);

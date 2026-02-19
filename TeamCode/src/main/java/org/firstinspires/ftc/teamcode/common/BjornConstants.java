@@ -28,7 +28,7 @@ public final class BjornConstants {
         public static final String TURRET = "Turret";
         public static final String GRIP1 = "Grip1";
         public static final String GRIP2 = "Grip2";
-        // public static final String BOOT = "boot"; // Removed
+
 
         // Default behaviors
         // public static final DcMotor.Direction DRIVE_DIRECTION =
@@ -37,8 +37,8 @@ public final class BjornConstants {
 
         public static final DcMotor.Direction INTAKE_DIRECTION = DcMotor.Direction.REVERSE;
         public static final DcMotor.ZeroPowerBehavior INTAKE_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
-        public static final DcMotor.Direction WHEEL2_DIRECTION = DcMotor.Direction.FORWARD; // flip if needed
-        public static final DcMotor.Direction WHEEL_DIRECTION = DcMotor.Direction.FORWARD; // flip if needed
+        public static final DcMotor.Direction WHEEL2_DIRECTION = DcMotor.Direction.REVERSE; // flip if needed
+        public static final DcMotor.Direction WHEEL_DIRECTION = DcMotor.Direction.REVERSE; // flip if needed
         public static final DcMotor.Direction TURRET_DIRECTION = DcMotor.Direction.FORWARD;
         public static final DcMotor.ZeroPowerBehavior TURRET_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
         /**
@@ -52,6 +52,10 @@ public final class BjornConstants {
          * Set to -1.0 to invert power output if the PID drives the turret the wrong way.
          */
         public static final double TURRET_POWER_DIRECTION = -1.0;
+
+        // Turret Limits
+        public static final double TURRET_MIN_DEG = 0.0;
+        public static final double TURRET_MAX_DEG = 180.0;
         public static final DcMotorSimple.Direction GRIP1_DIRECTION = DcMotorSimple.Direction.REVERSE;
         public static final DcMotorSimple.Direction GRIP2_DIRECTION = DcMotorSimple.Direction.FORWARD;
     }
@@ -71,7 +75,7 @@ public final class BjornConstants {
         }
 
         public static final String IMU = "imu";
-        public static final String TOF_FRONT = "TOF";
+
     }
 
     public static final class Power {
@@ -87,18 +91,23 @@ public final class BjornConstants {
         // Max RPM change per update step for ramping, to reduce current spikes
         public static final int SHOOTER_MAX_RPM_STEP_PER_UPDATE = 250; // tune as needed
 
+        public static volatile long SHOOTER_RAMP_DURATION_MS = 3000L;
+
         // S-Curve Ramp Tuning (Live Tunable)
         public static double RAMP_COEF = 0.00025;
         public static double RAMP_MIN_RATE = 400.0;
 
         // Dynamic RPM Calculation Constants
-        public static final double SHOOTER_RPM_SLOPE_TOF = 116.4042383594456;
-        public static final double SHOOTER_RPM_OFFSET_TOF = 2284.2966941424975;
-        public static final double SHOOTER_RPM_SLOPE_CV = 116.4042383594456;
-        public static final double SHOOTER_RPM_OFFSET_CV = 2284.2966941424975;
 
-        public static final double SHOOTER_MIN_RPM = 2200.0; // Lower bound for valid shots
-        public static final double SHOOTER_MAX_RPM = 4500.0; // Safety cap
+        public static final double SHOOTER_RPM_SLOPE_CV = 116.4042383594456;
+        public static final double SHOOTER_RPM_OFFSET_CV = 2084.2966941424975;
+        
+        // Swyft Ranger RPM Constants (Baseline = CV constants)
+        public static final double SHOOTER_RPM_SLOPE_RANGER = 116.4042383594456;
+        public static final double SHOOTER_RPM_OFFSET_RANGER = 2084.2966941424975;
+
+        public static final double SHOOTER_MIN_RPM = 1000.0; // Lower bound for valid shots
+        public static final double SHOOTER_MAX_RPM = 6000.0; // Safety cap
     }
 
     public static final class Auto {
@@ -106,12 +115,14 @@ public final class BjornConstants {
         }
 
         // End Poses for Auto-Drive (PedroPathing)
-        // TODO: Verify these coordinates match your actual auto end positions
+        // Blue: Parks at (60, 36) facing 0° (ParkTest verified)
+        // Red: Parks at (84, 36) facing 180° (Mirrored from Blue)
         public static final com.pedropathing.geometry.Pose BLUE_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
-                -30.8,
-                46.8, Math.toRadians(-165));
-        public static final com.pedropathing.geometry.Pose RED_AUTO_END_POSE = new com.pedropathing.geometry.Pose(27.2,
-                61, Math.toRadians(-13.7));
+                60.0,
+                36.0, Math.toRadians(0)); // Matches BjornBlueParkTest
+        public static final com.pedropathing.geometry.Pose RED_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
+                96.0,
+                72.0, Math.toRadians(0)); // Matches BjornRedGoalAuto Path 10 End
 
         public static final com.pedropathing.geometry.Pose BLUE_AUTO_START_POSE = new com.pedropathing.geometry.Pose(0,
                 0, Math.toRadians(265));
@@ -155,5 +166,22 @@ public final class BjornConstants {
             public static final com.pedropathing.geometry.Pose PARK = new com.pedropathing.geometry.Pose(28.6, 48.7,
                     Math.toRadians(-145));
         }
+    }
+
+    public static final class FieldPositions {
+        private FieldPositions() {
+        }
+
+        // Scoring Zone Target Coordinates (Inches)
+        // These are the fixed field positions where the turret should aim
+        public static final double BLUE_SCORING_X = 15.0;
+        public static final double BLUE_SCORING_Y = 135.0;
+        
+        public static final double RED_SCORING_X = 129.0;  // Mirrored from blue (144 - 15)
+        public static final double RED_SCORING_Y = 135.0;
+        
+        // Legacy Goal Poses (kept for reference)
+        public static final com.pedropathing.geometry.Pose RED_GOAL = new com.pedropathing.geometry.Pose(60, 60, 0); 
+        public static final com.pedropathing.geometry.Pose BLUE_GOAL = new com.pedropathing.geometry.Pose(-60, 60, 0);
     }
 }

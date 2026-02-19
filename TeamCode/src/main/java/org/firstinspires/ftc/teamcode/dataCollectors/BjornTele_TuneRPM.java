@@ -6,7 +6,8 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.DistanceSensor;
+
+
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
@@ -22,8 +23,8 @@ public class BjornTele_TuneRPM extends OpMode {
 
     // ---------- MECHS ----------
     private DcMotorEx Intake, Wheel, Wheel2; // read velocity from Wheel
-    private Servo Boot;
-    private DistanceSensor tofFront;
+
+
 
     // ---------- AUX ----------
     private final Telemetry panels = PanelsTelemetry.INSTANCE.getFtcTelemetry();
@@ -87,8 +88,8 @@ public class BjornTele_TuneRPM extends OpMode {
         Intake = hardwareMap.get(DcMotorEx.class, "Intake");
         Wheel = hardwareMap.get(DcMotorEx.class, "Wheel");
         Wheel2 = hardwareMap.get(DcMotorEx.class, "Wheel2");
-        Boot = hardwareMap.get(Servo.class, "boot");
-        tofFront = hardwareMap.get(DistanceSensor.class, "TOF");
+
+
 
         // Directions (copying your pattern)
         FrontL.setDirection(DcMotor.Direction.REVERSE);
@@ -113,11 +114,8 @@ public class BjornTele_TuneRPM extends OpMode {
         Wheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         Wheel2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        // No boot motion in init
-        try {
-            Boot.setPosition(0.10);
-        } catch (Exception ignored) {
-        }
+
+
 
         // IMU present but not used for drive math (robot-centric requested).
         imu = hardwareMap.get(IMU.class, "imu");
@@ -206,8 +204,8 @@ public class BjornTele_TuneRPM extends OpMode {
         lastSampleTime = now;
         lastWheelRpm = wheelRpm;
 
-        double tofIn = safeTofInches(tofFront);
-        double distFt = (tofIn > 0) ? (tofIn / 12.0) : Double.NaN;
+        double tofIn = -1.0; 
+        double distFt = Double.NaN;
 
         // ---------- 5) LAUNCH DETECT with SPIN-UP SUPPRESSION ----------
         boolean warmupOver = (spinupStartTime < 0) || ((now - spinupStartTime) * 1000.0 >= WARMUP_MS);
@@ -429,14 +427,7 @@ public class BjornTele_TuneRPM extends OpMode {
         return (min == Double.POSITIVE_INFINITY) ? 0.0 : min;
     }
 
-    private static double safeTofInches(DistanceSensor ds) {
-        try {
-            double d = ds.getDistance(DistanceUnit.INCH);
-            return (Double.isNaN(d) || d <= 0) ? -1.0 : d;
-        } catch (Exception e) {
-            return -1.0;
-        }
-    }
+
 
     private void adjustTarget(double delta) {
         targetWheelRPM = clamp(targetWheelRPM + delta, RPM_MIN, RPM_MAX);

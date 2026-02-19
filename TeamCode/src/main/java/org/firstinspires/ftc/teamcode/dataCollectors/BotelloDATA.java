@@ -13,7 +13,7 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
-@TeleOp(name = "BotelloDATA")
+@TeleOp(name = "BotelloDATA", group = "Tuning")
 public class BotelloDATA extends OpMode {
 
     // Drive motors (stay DcMotor – no velocity reads)
@@ -22,8 +22,7 @@ public class BotelloDATA extends OpMode {
     // Mechanisms (use DcMotorEx so we can read velocity)
     private DcMotorEx Intake, Wheel, Wheel2;
 
-    // Auto-boot servo (stays lowered, kicks only when wheel velocity >= threshold)
-    private Servo Boot;
+
 
     // Panels telemetry
     private final Telemetry panels = PanelsTelemetry.INSTANCE.getFtcTelemetry();
@@ -48,16 +47,7 @@ public class BotelloDATA extends OpMode {
     private static final double WHEEL_TPR = MOTOR_ENCODER_CPR * WHEEL_GEAR_RATIO; // 28 for 1:1
 
     // ===== Servo config =====
-    private static final double BOOT_STOW_POS = 0.0; // resting (default)
-    private static final double BOOT_KICK_POS = 0.5; // extended only when wheel is fast enough
 
-    // Velocity thresholds for boot hysteresis (RPM -> TPS)
-    private static final double BOOT_ON_RPM = 2000.0; // extend at/above this wheel speed
-    private static final double BOOT_OFF_RPM = 1500.0; // retract at/below this wheel speed
-    private static final double BOOT_ON_TPS = (BOOT_ON_RPM / 60.0) * WHEEL_TPR;
-    private static final double BOOT_OFF_TPS = (BOOT_OFF_RPM / 60.0) * WHEEL_TPR;
-
-    private boolean bootIsExtended = false; // track last servo state for hysteresis
 
     // ===== Tunable RPM hold =====
     private double targetWheelRPM = 3550.0; // starting setpoint (under-load target)
@@ -81,7 +71,7 @@ public class BotelloDATA extends OpMode {
         Wheel2 = hardwareMap.get(DcMotorEx.class, "Wheel2");
 
         // Map servo
-        Boot = hardwareMap.get(Servo.class, "boot");
+
 
         // Directions
         FrontL.setDirection(DcMotor.Direction.REVERSE);
@@ -115,8 +105,7 @@ public class BotelloDATA extends OpMode {
         // Wheel.setVelocityPIDFCoefficients(kP, kI, kD, kF);
 
         // Servo default
-        Boot.setPosition(BOOT_STOW_POS);
-        bootIsExtended = false;
+
 
         // IMU setup
         imu = hardwareMap.get(IMU.class, "imu");
@@ -211,14 +200,8 @@ public class BotelloDATA extends OpMode {
             setWheelPower(0.0);
         }
 
-        // ===== Auto-Boot Servo based on Wheel velocity =====
-        if (!bootIsExtended && wheelTps >= BOOT_ON_TPS) {
-            Boot.setPosition(BOOT_KICK_POS);
-            bootIsExtended = true;
-        } else if (bootIsExtended && wheelTps <= BOOT_OFF_TPS) {
-            Boot.setPosition(BOOT_STOW_POS);
-            bootIsExtended = false;
-        }
+
+
 
         // Telemetry/graphs
         double intakeTps = safeVel(Intake);
@@ -231,8 +214,7 @@ public class BotelloDATA extends OpMode {
         panels.addData("Wheel_TPS_meas", wheelTps);
         panels.addData("Intake_RPM", intakeRpm);
         panels.addData("Battery_V", batteryV);
-        panels.addData("Boot_Pos", Boot.getPosition());
-        panels.addData("BootExtended", bootIsExtended);
+
         panels.addData("Heading_deg", Math.toDegrees(heading));
         panels.addData("FL_power", fl);
         panels.addData("FR_power", fr);

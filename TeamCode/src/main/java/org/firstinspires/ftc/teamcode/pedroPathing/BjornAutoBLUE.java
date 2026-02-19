@@ -7,7 +7,8 @@ import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.DistanceSensor;
+
+
 import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
@@ -36,7 +37,7 @@ public class BjornAutoBLUE extends OpMode {
     // ---------------- Hardware ----------------
     private Follower follower;
     private DcMotorEx Intake, Wheel, Wheel2;
-    private DistanceSensor tof;
+
 
     // ---------------- Tunables ----------------
     // Speeds
@@ -63,12 +64,12 @@ public class BjornAutoBLUE extends OpMode {
     // rpm = M_RPM_PER_FT * feet + B_RPM_OFFSET (clamped to [WHEEL_MIN_RPM,
     // WHEEL_MAX_RPM])
     private static double M_RPM_PER_FT = 116.4042383594456;
-    private static double B_RPM_OFFSET = 2084.2966941424975;
+    private static double B_RPM_OFFSET = 1884.2966941424975;
 
     // NEW: final RPM bias to compensate small undershoot/overshoot
     // Positive values add RPM; negative values subtract. Applied only to the final
     // launch RPM.
-    private static double FINAL_RPM_OFFSET = 150.0;
+    private static double FINAL_RPM_OFFSET = -50.0;
 
     // Hysteresis (for deciding if wheel is "ready")
     private static double READY_ON_RPM = 2200; // consider ready when >= this
@@ -136,7 +137,7 @@ public class BjornAutoBLUE extends OpMode {
         Intake = hardware.intake;
         Wheel = hardware.wheel;
         Wheel2 = hardware.wheel2;
-        tof = hardware.frontTof;
+
 
         // Build paths
         toShoot = line(START, SHOOT_ZONE);
@@ -290,20 +291,11 @@ public class BjornAutoBLUE extends OpMode {
 
         // 1) Finish scan → compute dynamic RPM once
         if (scanLeft > 0) {
-            double inches = safeTofInches(tof);
-            scan[SCAN_SAMPLES - scanLeft] = inches;
             scanLeft--;
             if (scanLeft == 0) {
-                double inchesMed = median(scan, SCAN_SAMPLES);
-                if (inchesMed > 6 && inchesMed <= 120) {
-                    double ft = inchesMed / 12.0 + SENSOR_OFFSET_FT;
-                    double dyn = clamp(M_RPM_PER_FT * ft + B_RPM_OFFSET, WHEEL_MIN_RPM, WHEEL_MAX_RPM);
-                    double biased = clamp(dyn + FINAL_RPM_OFFSET, WHEEL_MIN_RPM, WHEEL_MAX_RPM);
-                    setWheelRPM(biased); // apply final offset only to the launch target
-                } else {
-                    double fallback = (WHEEL_MIN_RPM + WHEEL_MAX_RPM) * 0.5;
-                    setWheelRPM(clamp(fallback + FINAL_RPM_OFFSET, WHEEL_MIN_RPM, WHEEL_MAX_RPM));
-                }
+                // No TOF, use fallback
+                double fallback = (WHEEL_MIN_RPM + WHEEL_MAX_RPM) * 0.5;
+                setWheelRPM(clamp(fallback + FINAL_RPM_OFFSET, WHEEL_MIN_RPM, WHEEL_MAX_RPM));
             }
         }
 
@@ -404,14 +396,7 @@ public class BjornAutoBLUE extends OpMode {
         return (ticksPerRev <= 0) ? 0.0 : (ticksPerSec / ticksPerRev) * 60.0;
     }
 
-    private static double safeTofInches(DistanceSensor ds) {
-        try {
-            double d = ds.getDistance(DistanceUnit.INCH);
-            return (Double.isNaN(d) || d <= 0) ? -1.0 : d;
-        } catch (Exception e) {
-            return -1.0;
-        }
-    }
+
 
     private static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));

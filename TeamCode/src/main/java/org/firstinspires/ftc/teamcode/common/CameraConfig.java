@@ -42,6 +42,10 @@ public final class CameraConfig {
     // 1.0 = Add yaw to current. -1.0 = Subtract yaw from current.
     // Use this to flip direction if turret moves AWAY from tag.
     public static final double CAMERA_TO_TURRET_SCALAR = 1.0;
+    
+    // Lateral offset of camera relative to robot/turret center.
+    // Positive = Camera is to the LEFT of center relative to the shooter.
+    public static final double CAMERA_LATERAL_OFFSET_INCHES = 2.0;
 
     private CameraConfig() {
     }

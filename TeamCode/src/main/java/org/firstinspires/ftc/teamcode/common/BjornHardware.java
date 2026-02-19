@@ -3,12 +3,13 @@ package org.firstinspires.ftc.teamcode.common;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.DistanceSensor;
+
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
+import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import java.util.List;
@@ -30,17 +31,18 @@ public final class BjornHardware {
     public final DcMotorEx turret;
     public final CRServo grip1;
     public final CRServo grip2;
-    // public final CRServo boot; // Removed
+
     public final DigitalChannel led1Green;
     public final DigitalChannel led1Red;
     public final DigitalChannel led2Green;
     public final DigitalChannel led2Red;
     public final DigitalChannel brake1Green, brake1Red;
     public final DigitalChannel brake2Green, brake2Red;
-    public final DistanceSensor frontTof;
+    // public final org.firstinspires.ftc.teamcode.VL53L1X.VL53L1X frontTof; // Removed
     public final IMU imu;
-    // Boot
-    public final Servo boot; // Renamed from lift
+
+
+    public final AnalogInput swyftRanger;
     public final VoltageSensor batterySensor; // Can be null in some configs, but usually filtered
 
     private double lastTurretPos = 0.0;
@@ -54,7 +56,7 @@ public final class BjornHardware {
     // Cartridge 2: 4:1 (Actual: 3.61:1)
     // External Assembly: 4:1 (80T/20T)
     // Total = 5.23 * 3.61 * 4 = 75.52:1
-    private static final double TURRET_GEAR_REDUCTION = 75.52;
+    private static final double TURRET_GEAR_REDUCTION = 48.0;
 
     public static final double TURRET_TICKS_PER_DEGREE = (MOTOR_TICKS_PER_REV * TURRET_GEAR_REDUCTION) / 360.0;
 
@@ -72,9 +74,7 @@ public final class BjornHardware {
         grip1 = map.get(CRServo.class, BjornConstants.Motors.GRIP1);
         grip2 = map.get(CRServo.class, BjornConstants.Motors.GRIP2);
 
-        // Boot Removed
-        // boot = map.get(CRServo.class, BjornConstants.Motors.BOOT);
-        // boot.setDirection(CRServo.Direction.FORWARD);
+
 
         led1Green = map.get(DigitalChannel.class, "led1_green");
         led1Red = map.get(DigitalChannel.class, "led1_red");
@@ -103,11 +103,14 @@ public final class BjornHardware {
         brake2Green.setState(true);
         brake2Red.setState(false);
 
-        frontTof = map.get(DistanceSensor.class, BjornConstants.Sensors.TOF_FRONT);
+        // frontTof = map.get(org.firstinspires.ftc.teamcode.VL53L1X.VL53L1X.class, BjornConstants.Sensors.TOF_FRONT); // Removed
         imu = map.get(IMU.class, BjornConstants.Sensors.IMU);
 
-        // Boot
-        boot = map.get(Servo.class, "boot");
+
+
+
+        // Swyft Ranger
+        swyftRanger = map.get(com.qualcomm.robotcore.hardware.AnalogInput.class, SwyftRangerConstants.HARDWARE_NAME);
 
         IMU.Parameters parameters = new IMU.Parameters(new RevHubOrientationOnRobot(
                 RevHubOrientationOnRobot.LogoFacingDirection.LEFT,

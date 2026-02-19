@@ -16,6 +16,10 @@ public class TeleOpShooter {
     private boolean active = false;
     private boolean idle = false;
     private boolean useCv = false;
+    // Continuous Ranging State
+    private double smoothedVoltage = 0.0;
+    private static final double VOLTAGE_ALPHA = 0.1; // Smoothing factor for voltage
+    private boolean firstReading = true;
 
     private int targetRpm = 0;
     private double currentDistanceInches = 0.0;
@@ -34,19 +38,24 @@ public class TeleOpShooter {
         this.goalTagId = goalTagId;
     }
 
+
+
     public void toggle() {
-        active = !active;
-        if (active)
-            idle = false; // If turning active, ensure not just idling (though logic below handles
-                          // priority)
-        if (!active) {
-            // If turning off active, should we go to idle? Or full stop?
-            // Usually Toggle = OFF.
+        if (active) {
+            // Turning OFF
+            active = false;
+        } else {
+            // Turning ON
+            active = true;
+            idle = false;
+            firstReading = true; // Reset smoother on activation
         }
     }
 
     public void toggleIdle() {
         idle = !idle;
+        // If we toggle idle ON while active, does nothing (active overrides).
+        // If we toggle idle OFF while active, does nothing.
     }
 
     public void toggleCv() {
@@ -59,6 +68,20 @@ public class TeleOpShooter {
 
     public boolean isIdle() {
         return idle;
+    }
+    
+    public boolean isScanning() {
+        // If active, we are scanning/shooting
+        return active;
+    }
+    
+    public void startScan() {
+        // Enable Active Mode (Scan & Shoot)
+        if (!active) {
+            active = true;
+            idle = false;
+            firstReading = true;
+        }
     }
 
     public boolean isCvEnabled() {
@@ -87,51 +110,42 @@ public class TeleOpShooter {
         filteredRpm = (EMA_ALPHA * measured) + ((1.0 - EMA_ALPHA) * filteredRpm);
 
         if (active) {
-            double calculatedRpm = 0.0;
-            boolean usingCvCalc = false;
-
-            // 1. Try CV if enabled and available
-            if (useCv && camera != null && goalTagId != -1) {
-                List<TagObservation> detections = camera.pollDetections();
-                for (TagObservation obs : detections) {
-                    if (obs.id == goalTagId) {
-                        double x = obs.x / 0.0254; // meters to inches
-                        double y = obs.y / 0.0254;
-                        double z = obs.z / 0.0254;
-                        double distIn = Math.sqrt(x * x + y * y + z * z);
-                        currentDistanceInches = distIn; // update metric
-                        double rangeFt = distIn / 12.0;
-
-                        double slope = BjornConstants.Power.SHOOTER_RPM_SLOPE_CV;
-                        double offset = BjornConstants.Power.SHOOTER_RPM_OFFSET_CV;
-                        calculatedRpm = (slope * rangeFt) + offset;
-                        usingCvCalc = true;
-                        break;
-                    }
+            // Continuous Ranging & RPM Update
+            if (hardware.swyftRanger != null) {
+                double rawVolts = hardware.swyftRanger.getVoltage();
+                
+                // Init smoother if first run
+                if (firstReading) {
+                    smoothedVoltage = rawVolts;
+                    firstReading = false;
+                } else {
+                    smoothedVoltage = (VOLTAGE_ALPHA * rawVolts) + ((1.0 - VOLTAGE_ALPHA) * smoothedVoltage);
                 }
+
+                // Read Battery for Compensation
+                double battV = 13.0; // Default nominal
+                if (hardware.batterySensor != null) {
+                    try { battV = hardware.batterySensor.getVoltage(); } catch (Exception ignored) {}
+                }
+
+                // Calculate Distance
+                double distIn = org.firstinspires.ftc.teamcode.common.SwyftRangerConstants.voltageToInches(smoothedVoltage, battV);
+                currentDistanceInches = distIn;
+
+                // Calculate RPM (Range -> RPM)
+                double rangeFt = distIn / 12.0;
+                double slope = BjornConstants.Power.SHOOTER_RPM_SLOPE_RANGER;
+                double offset = BjornConstants.Power.SHOOTER_RPM_OFFSET_RANGER;
+                double calculatedRpm = (slope * rangeFt) + offset;
+
+                // Set Target
+                targetRpm = (int) Math.max(BjornConstants.Power.SHOOTER_MIN_RPM,
+                        Math.min(calculatedRpm, BjornConstants.Power.SHOOTER_MAX_RPM));
+            } else {
+                 // Fallback if sensor missing but active
+                 targetRpm = IDLE_RPM; 
             }
 
-            // 2. Fallback to ToF if CV didn't result in calc
-            if (!usingCvCalc) {
-                if (hardware.frontTof != null) {
-                    double distIn = hardware.frontTof.getDistance(DistanceUnit.INCH);
-                    if (distIn > 100 || Double.isNaN(distIn)) {
-                        // Bad data
-                        currentDistanceInches = 0.0;
-                        calculatedRpm = BjornConstants.Power.SHOOTER_MIN_RPM; // Default safely?
-                    } else {
-                        currentDistanceInches = distIn;
-                        double rangeFt = distIn / 12.0;
-                        double slope = BjornConstants.Power.SHOOTER_RPM_SLOPE_TOF;
-                        double offset = BjornConstants.Power.SHOOTER_RPM_OFFSET_TOF;
-                        calculatedRpm = (slope * rangeFt) + offset;
-                    }
-                }
-            }
-
-            // Clamp
-            targetRpm = (int) Math.max(BjornConstants.Power.SHOOTER_MIN_RPM,
-                    Math.min(calculatedRpm, BjornConstants.Power.SHOOTER_MAX_RPM));
             setFlywheelRpm(targetRpm);
         } else if (idle) {
             targetRpm = IDLE_RPM;
@@ -143,6 +157,11 @@ public class TeleOpShooter {
 
         // 5. Update LEDs
         updateLeds();
+    }
+
+    public void setTargetRpm(int rpm) {
+        this.targetRpm = rpm;
+        setFlywheelRpm(rpm);
     }
 
     private void setFlywheelRpm(int rpm) {

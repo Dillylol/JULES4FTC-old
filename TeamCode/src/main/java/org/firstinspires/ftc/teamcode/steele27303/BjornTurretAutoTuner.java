@@ -5,83 +5,73 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.util.Range;
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
+import org.firstinspires.ftc.teamcode.common.BjornHardware;
+import org.firstinspires.ftc.teamcode.configurables.BjornTurretTunerConfig;
+import org.firstinspires.ftc.teamcode.configurables.TurretConfigurables;
 
 /**
- * JULES Turret Auto-Tuner v7 - Step Response (Gentle)
+ * JULES Turret Auto-Tuner v11 - Step Response & Live Verify
  * 
- * Safe Step Response Tuner:
- * 1. Safe Centering: Uses current PID to center turret.
- * 2. Step Response: Applies 40% power step.
- * 3. Curve Analysis: Finds Max Velocity (Vmax) and Time Constant (Tau).
- * 4. Calc: Uses Cohen-Coon method to derive PID.
+ * Functions:
+ * 1. Auto-Tune (A Button): Runs Step Response to finding Kp, Kd, Kv (FeedForward).
+ * 2. Live Verify (X Button): Runs Square Wave using current Config settings.
  * 
- * Controls:
- * - A: Start
- * - B: EMERGENCY STOP
+ * NOTE: TEMPORARILY DISABLED - Incompatible with new TurretConfigurables API
+ * Need to update to use new field names (no feedForward, no kI)
  */
-@TeleOp(name = "Bjorn Turret Auto Tuner Step", group = "Test")
+// DISABLED: @TeleOp(name = "Bjorn Turret Auto Tuner", group = "Test")
 public class BjornTurretAutoTuner extends BjornTeleBase {
 
     private DcMotorEx turret;
     
-    // Constants
-    private static final double MOTOR_TICKS_PER_REV = 28.0;
-    private static final double TURRET_GEAR_REDUCTION = 75.52;
-    private static final double TURRET_TICKS_PER_DEGREE = (MOTOR_TICKS_PER_REV * TURRET_GEAR_REDUCTION) / 360.0;
-    
-    // Limits
-    private static final double HARD_MIN = 30.0;
-    private static final double HARD_MAX = 155.0;
+    // --- Limits ---
+    public static double HARD_MIN = -10.0;
+    public static double HARD_MAX = 170.0;
     private static final double CENTER = 90.0;
-    private static final double STOP_ANGLE = 135.0; // Stop step test here (Safe within 155)
-    
-    // Tuning Parameters
-    private static final double STEP_POWER = 0.40; // 40% Power Step
-    
-    // Centering PID (Current Working Values)
-    private static final double CENTER_KP = 0.015;
-    private static final double CENTER_KD = 0.004;
+    private static final double STOP_ANGLE = 135.0; // Stop step test here
+    private static final double STEP_POWER = 0.65;  // INCREASED for Friction (min 0.55)
     
     private enum State {
         IDLE,
-        CENTERING,
-        STEP_TEST,
-        COMPLETE,
-        ESTOP
+        CENTERING, // Move to 90 safely
+        RESETTING, 
+        STEP_TEST, // Apply constant voltage, measure curve
+        CALCULATED, // Show results
+        LIVE_VERIFY // Square wave mode
     }
     private State currentState = State.IDLE;
     
-    // Data
+    // --- Data Collection ---
     private double t0 = 0;
     private double maxVelocity = 0;
-    private double timeToReach63 = 0; // Tau
-    private boolean tauFound = false;
+    private double calcKp = 0, calcKd = 0, calcKv = 0;
     
-    // Results
-    private double calcKp = 0;
-    private double calcKd = 0;
-    private double calcKv = 0;
-    
-    // Runtime
+    // --- Runtime ---
     private double lastLoopTime = 0;
     private int lastEncoderPos = 0;
     private double turretAngleDeg = 0;
     private double lastError = 0;
+    private double lastIntegral = 0;
+    private double timer = 0;
+    
+    // Input Debounce
+    private boolean aPrev = false;
+    private boolean xPrev = false;
     
     @Override
     public void init() {
-        turret = hardwareMap.get(DcMotorEx.class, "Turret");
-        turret.setDirection(BjornConstants.Motors.TURRET_DIRECTION);
-        turret.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        turret.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        initSubsystems(); 
+        this.turret = hardware.turret; // Use BjornHardware instance
+        
+        // Override for Tuner (User reported backwards)
+        turret.setDirection(DcMotor.Direction.REVERSE);
+        
+        // Tuner needs raw control
         turret.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         
-        initSubsystems();
-        
-        telemetry.addLine("=== STEP RESPONSE TUNER v7 ===");
-        telemetry.addLine("Gentle 40% Power Test");
-        telemetry.addLine("1. Center -> 2. Step -> 3. Calc");
-        telemetry.addLine("Press A to Start");
+        telemetry.addLine("=== Bjorn Turret Tuner ===");
+        telemetry.addLine("[A] -> START AUTO-TUNE (Calculates PIDF)");
+        telemetry.addLine("[X] -> TOGGLE LIVE VERIFY (Uses Config Panel)");
         telemetry.update();
     }
     
@@ -95,173 +85,180 @@ public class BjornTurretAutoTuner extends BjornTeleBase {
         // E-STOP
         if (gamepad1.b || gamepad2.b) {
             turret.setPower(0);
-            currentState = State.ESTOP;
+            currentState = State.IDLE;
+            BjornTurretTunerConfig.runTest = false;
         }
+        
+        // Auto-Tune Start
+        if (gamepad1.a && !aPrev && currentState == State.IDLE) {
+             currentState = State.CENTERING;
+             resetData();
+        }
+        aPrev = gamepad1.a;
+
+        // Live Verify Toggle
+        if (gamepad1.x && !xPrev) {
+            if (currentState == State.LIVE_VERIFY) {
+                currentState = State.IDLE;
+                BjornTurretTunerConfig.runTest = false;
+            } else {
+                currentState = State.LIVE_VERIFY;
+                BjornTurretTunerConfig.runTest = true;
+                timer = 0;
+            }
+        }
+        xPrev = gamepad1.x;
 
         long nowMs = System.currentTimeMillis();
         double now = nowMs / 1000.0;
         double dt = (lastLoopTime > 0) ? (now - lastLoopTime) : 0.02;
         lastLoopTime = now;
         
-        // Update encoder
+        // --- Read Hardware ---
         int currentPos = turret.getCurrentPosition();
         int deltaTicks = currentPos - lastEncoderPos;
         lastEncoderPos = currentPos;
-        turretAngleDeg += (deltaTicks / TURRET_TICKS_PER_DEGREE) * BjornConstants.Motors.TURRET_ENCODER_DIRECTION;
-        double velocity = (deltaTicks / TURRET_TICKS_PER_DEGREE) * BjornConstants.Motors.TURRET_ENCODER_DIRECTION / dt; // deg/s
+        
+        // Angle Calculation
+        turretAngleDeg += (deltaTicks / BjornHardware.TURRET_TICKS_PER_DEGREE); 
+        double velocity = (deltaTicks / BjornHardware.TURRET_TICKS_PER_DEGREE) / dt;
 
-        // Hard Limit Safety (Always Active except during step test we manage it)
+        // Safety Limit
         if (turretAngleDeg < HARD_MIN || turretAngleDeg > HARD_MAX) {
-             if (currentState != State.IDLE && currentState != State.ESTOP && currentState != State.COMPLETE && currentState != State.CENTERING) {
-                turret.setPower(0);
-                currentState = State.ESTOP;
-            }
+             // Exception: During Centering we might be near limits, be careful
+             if (currentState != State.IDLE && currentState != State.CALCULATED) {
+                 turret.setPower(0);
+                 currentState = State.IDLE;
+                 telemetry.addData("STATUS", "LIMIT HIT! RESET.");
+             }
         }
 
         switch (currentState) {
             case IDLE:
                 turret.setPower(0);
-                if (gamepad1.a || gamepad2.a) {
-                    resetData();
-                    currentState = State.CENTERING;
-                }
                 break;
                 
             case CENTERING:
-                // Move safely to 90 degrees
-                double error = CENTER - turretAngleDeg;
-                double derivative = (dt > 0) ? (error - lastError) / dt : 0;
-                double pidPower = (error * CENTER_KP) + (derivative * CENTER_KD);
-                lastError = error;
-                
-                // IMPORTANT: Use direction multiplier
-                double finalPower = pidPower * BjornConstants.Motors.TURRET_POWER_DIRECTION;
-                turret.setPower(Range.clip(finalPower, -0.6, 0.6)); // Soft limit power during centering
-                
-                telemetry.addData("State", "CENTERING");
-                telemetry.addData("Error", error);
-                
-                if (Math.abs(error) < 5.0 && Math.abs(velocity) < 10.0) {
+                // Move safely to 90
+                if (moveSafelyTo(CENTER, dt)) {
                     turret.setPower(0);
-                    // Wait 1 second to settle? Or just go?
-                    // Let's trigger step.
+                    // Wait for settle?
                     t0 = now;
                     currentState = State.STEP_TEST;
                 }
                 break;
                 
             case STEP_TEST:
-                // Apply constant Step Voltage
-                // We want to go RIGHT (Positive Angle)
-                // If PowerDirection is -1.0, we need Negative Raw Power to get Positive Output?
-                // Wait. setPower(val * PowerDir).
-                // If we send 1.0 * PowerDir(-1.0) = -1.0 Output.
-                // -1.0 Output -> Ticks Decrease -> Angle Increases (Right).
-                // So sending +STEP_POWER * PowerDir should move Right.
+                // Apply Step
+                turret.setPower(STEP_POWER); 
                 
-                turret.setPower(STEP_POWER * BjornConstants.Motors.TURRET_POWER_DIRECTION);
-                
-                // Record Stats
+                // Capture Max Velocity
                 double absVel = Math.abs(velocity);
-                if (absVel > maxVelocity) {
-                    maxVelocity = absVel;
-                }
+                if (absVel > maxVelocity) maxVelocity = absVel;
                 
-                // Find Tau (Time to reach 63.2% of Max Velocity)
-                // This is dynamic estimation. Better to continuously check.
-                // Since we don't know Vmax yet, we capture the curve.
-                // Simplified: We assume Vmax is reached near end of test.
-                // We need to store samples? No, let's just run until angle limit.
-                
-                telemetry.addData("State", "STEPPING (40%)");
-                telemetry.addData("Vel", "%.0f", absVel);
-                telemetry.addData("MaxVel", "%.0f", maxVelocity);
-                
-                // Stop Condition
+                // End Condition
                 if (turretAngleDeg >= STOP_ANGLE) {
                     turret.setPower(0);
-                    calculatePID(now - t0);
-                    currentState = State.COMPLETE;
+                    calculateResults(STEP_POWER, maxVelocity);
+                    currentState = State.CALCULATED;
                 }
                 break;
                 
-            case COMPLETE:
+            case CALCULATED:
                 turret.setPower(0);
-                telemetry.addLine("=== STEP TUNE COMPLETE ===");
-                telemetry.addData("Kp", "%.5f", calcKp);
-                telemetry.addData("Kd", "%.5f", calcKd);
-                telemetry.addData("Kv", "%.5f", calcKv);
-                telemetry.addData("MaxVel", "%.0f", maxVelocity);
-                telemetry.addData("Tau", "%.3fs", timeToReach63);
-                telemetry.addLine("Press A to Restart");
-                
-                if (gamepad1.a || gamepad2.a) {
-                    currentState = State.IDLE;
-                }
+                telemetry.addLine("=== CALCULATION COMPLETE ===");
+                telemetry.addData("Max Vel", "%.1f deg/s", maxVelocity);
+                telemetry.addData("Rec. kP", "%.5f", calcKp);
+                telemetry.addData("Rec. kD", "%.5f", calcKd);
+                telemetry.addData("Rec. FF", "%.5f", calcKv);
+                telemetry.addLine("Update 'TurretConfigurables' with these values!");
+                telemetry.addLine("Press X to Verify with current Config");
                 break;
                 
-            case ESTOP:
-                turret.setPower(0);
-                telemetry.addLine("!!! ESTOP !!!");
-                telemetry.addData("Angle", "%.1f", turretAngleDeg);
-                telemetry.addLine("Press A to Restart");
-                if (gamepad1.a) {
-                    currentState = State.IDLE;
-                }
+            case LIVE_VERIFY:
+                runLiveVerify(dt);
                 break;
         }
-        
+
+        telemetry.addData("State", currentState);
+        telemetry.addData("Angle", "%.1f", turretAngleDeg);
         telemetry.update();
     }
     
     private void resetData() {
         maxVelocity = 0;
-        timeToReach63 = 0;
-        tauFound = false;
         lastError = 0;
+        lastIntegral = 0;
     }
     
-    private void calculatePID(double duration) {
-        // 1. Process Gain (K) = Output Speed / Input %
-        // K = (deg/s) / (0.40)
-        double K = maxVelocity / STEP_POWER;
+    // Simple Centering P-Controller
+    private boolean moveSafelyTo(double target, double dt) {
+        double error = target - turretAngleDeg;
+        double derivative = (error - lastError) / dt;
+        lastError = error;
         
-        // 2. Time Constant (Tau) approximation
-        // Assume it took roughly 'duration' to reach max speed? No, that's unsafe.
-        // Better approx for FTC:
-        // Tau = time to reach 63% speed.
-        // We didn't record time-series, so we estimate Tau based on acceleration.
-        // Let's use a standard approximation for DC motors: Tau ~ 0.1s to 0.2s usually.
-        // Or calculate from displacement vs time if we assume 1st order.
-        // Displacement d = Vmax * (t - Tau + Tau*e^(-t/Tau))
-        // This is complex to solve onboard. 
+        double kp = 0.00379; 
+        double kd = 0.00011;
+        double kStatic = 0.5;
         
-        // CHANGE: Let's assume Tau ~ 0.15s (typical for Neverest/GoBilda) if we can't measure it.
-        // OR: Use the "rise time" based on average accel.
-        // Avg Accel = MaxVel / RiseTime.
-        // RiseTime approx 3*Tau.
-        // Let's blindly guess Tau = 0.1s for now to be safe, or 0.2s.
-        // Let's use 0.1s.
+        double pid = (error * kp) + (derivative * kd);
+        double ff = Math.signum(error) * kStatic;
         
+        double power = pid + ff;
+        power = Range.clip(power, -0.7, 0.7); // Increased limit to allow movement
+        
+        turret.setPower(power);
+        
+        return Math.abs(error) < 3.0; // Settled enough for Step Test
+    }
+    
+    private void calculateResults(double inputPct, double maxVelDegS) {
+        // 1. Process Gain K = Speed / %
+        double K = maxVelDegS / inputPct;
+        
+        // 2. FeedForward (Kv) approx
+        calcKv = inputPct / maxVelDegS; 
+        
+        // 3. Time Constant (Tau) Estimate
         double Tau = 0.1; 
+        double DeadTime = 0.04; 
         
-        // 3. Cohen-Coon / ZN Open Loop
-        // Kp = (1.35 / K) * (Tau / DeadTime)
-        // DeadTime is small, say 0.05s (loop + comms).
-        double DeadTime = 0.05;
-        
-        calcKv = 1.0 / maxVelocity;
-        
-        // AMIGAF (Approximate Model Inversion) or simple P-Control rule
-        // Kp = 1 / (K * (DeadTime + Tau)) is conservative 
-        // Let's use Cohen-Coon simplified:
-        // Kc = (1 / K) * (Tau / DeadTime) * 0.9
-        
+        // 4. Cohen-Coon Simplified
         double rawKp = (1.0 / K) * (Tau / DeadTime);
-        calcKp = rawKp * 0.6; // Safety factor
+        calcKp = rawKp * 0.6;
+        calcKd = calcKp * Tau * 0.3; 
+    }
+    
+    private void runLiveVerify(double dt) {
+         timer += dt;
+        double period = Math.max(0.1, BjornTurretTunerConfig.periodSec);
+        double phase = timer % period; 
+        double target = (phase < (period / 2.0)) ? BjornTurretTunerConfig.targetHigh : BjornTurretTunerConfig.targetLow;
         
-        // Kd usually Tau * Kp / 4 for damping
-        calcKd = calcKp * Tau * 0.5;
+        double error = target - turretAngleDeg;
         
+        // Apply Deadband to prevent oscillation from high Static Friction compensation
+        double ffTerm = 0.0;
+        if (Math.abs(error) < TurretConfigurables.deadband) {
+            error = 0.0; // Assume settled
+        } else {
+            ffTerm = 0.0; // Disabled - TurretConfigurables.feedForward removed
+        }
+
+        double derivative = (error - lastError) / dt;
+        lastIntegral += (error * dt);
+        lastIntegral = Range.clip(lastIntegral, -50, 50);
+        lastError = error;
+        
+        double pid = (error * TurretConfigurables.kP) + 
+                     (lastIntegral * 0.0) + // kI removed from TurretConfigurables
+                     (derivative * TurretConfigurables.kD) +
+                     ffTerm;
+        
+        double power = Range.clip(pid, -1.0, 1.0);
+        turret.setPower(power);
+        
+        telemetry.addData("Tgt", target);
+        telemetry.addData("Err", error);
     }
 }

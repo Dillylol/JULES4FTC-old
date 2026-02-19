@@ -113,33 +113,34 @@ public class VL53L1X extends I2cDeviceSynchDevice<I2cDeviceSynch> {
 
     // Ported from VL53L1X::init
     private boolean initSensor() {
-        // Soft Reset
-        writeReg(SOFT_RESET, (byte) 0x00);
-        try {
-            Thread.sleep(1);
-        } catch (InterruptedException e) {
-        }
-        writeReg(SOFT_RESET, (byte) 0x01);
-        try {
-            Thread.sleep(1);
-        } catch (InterruptedException e) {
-        }
+        // --- COMMENT OUT SOFT RESET ---
+        // writeReg(SOFT_RESET, (byte) 0x00);
+        // try {
+        //     Thread.sleep(1);
+        // } catch (InterruptedException e) {
+        // }
+        // writeReg(SOFT_RESET, (byte) 0x01);
+        // try {
+        //     Thread.sleep(1);
+        // } catch (InterruptedException e) {
+        // }
+        // ------------------------------
 
-        // Wait for Boot
-        long startTime = System.currentTimeMillis();
-        while ((readReg(FIRMWARE__SYSTEM_STATUS) & 0x01) == 0) {
-            if (System.currentTimeMillis() - startTime > 500)
-                return false; // Timeout
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-            }
-        }
+        // --- COMMENT OUT WAIT FOR BOOT ---
+        // long startTime = System.currentTimeMillis();
+        // while ((readReg(FIRMWARE__SYSTEM_STATUS) & 0x01) == 0) {
+        //     if (System.currentTimeMillis() - startTime > 500)
+        //         return false; // Timeout
+        //     try {
+        //         Thread.sleep(10);
+        //     } catch (InterruptedException e) {
+        //     }
+        // }
+        // ---------------------------------
 
-        // 2V8 Mode (Standard for most modules)
-        writeReg(PAD_I2C_HV__EXTSUP_CONFIG, (byte) (readReg(PAD_I2C_HV__EXTSUP_CONFIG) | 0x01));
+        // ... (Keep the Voltage Config commented out from before) ...
 
-        // Store Oscillator Info
+        // Store Oscillator Info (Keep this!)
         fastOscFrequency = readReg16Short(OSC_MEASURED__FAST_OSC__FREQUENCY) & 0xFFFF;
         oscCalibrateVal = readReg16Short(RESULT__OSC_CALIBRATE_VAL) & 0xFFFF;
 

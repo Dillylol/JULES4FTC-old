@@ -41,7 +41,7 @@ public final class ShooterController {
     private final DcMotorEx flywheel;
     private final DcMotorEx flywheelSecondary;
     private final DcMotorEx intake;
-    private final BjornHardware hardware; // Use BjornHardware for boot control
+    private final BjornHardware hardware;
     @Nullable
     private final VoltageSensor vSensor;
 

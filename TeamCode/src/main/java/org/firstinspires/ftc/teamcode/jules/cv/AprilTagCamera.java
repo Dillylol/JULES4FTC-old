@@ -8,7 +8,10 @@ import com.qualcomm.robotcore.util.RobotLog;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.ExposureControl;
+import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.ExposureControl;
+import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.FocusControl;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.GainControl;
+import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.PtzControl;
 import org.firstinspires.ftc.teamcode.jules.bridge.JulesStreamBus;
 import org.firstinspires.ftc.teamcode.common.CameraConfig;
 import org.firstinspires.ftc.vision.VisionPortal;
@@ -65,16 +68,39 @@ public final class AprilTagCamera implements AutoCloseable {
             return;
         }
 
+        // Scale intrinsics for 640x480 (Config is 1280x720)
+        double scale = 0.5;
         AprilTagProcessor processor = new AprilTagProcessor.Builder()
-                .setLensIntrinsics(CameraConfig.FX, CameraConfig.FY, CameraConfig.CX, CameraConfig.CY)
+                .setLensIntrinsics(
+                        CameraConfig.FX * scale, 
+                        CameraConfig.FY * scale, 
+                        CameraConfig.CX * scale, 
+                        CameraConfig.CY * scale)
                 .build();
         processor.setDecimation(decimation);
         try {
             visionPortal = new VisionPortal.Builder()
                     .setCamera(camName)
                     .addProcessor(processor)
+                    .setStreamFormat(VisionPortal.StreamFormat.MJPEG)
+                    .setCameraResolution(new android.util.Size(640, 480))
                     .build();
             aprilTagProcessor = processor;
+            
+            // Wait for camera to stream before setting controls (async check or simple delay?)
+            // VisionPortal.Builder.build() blocks until camera is opened, but maybe not streaming?
+            // We usually need the camera to be streaming to set these controls.
+            // Let's attempt to set them immediately, but guard for state.
+            // Proper way is usually listening for state change, but for simplicity we try here 
+            // and maybe again if needed.
+             if (visionPortal.getCameraState() == CameraState.STREAMING) {
+                configureCameraControls();
+            } else {
+                // If not ready, we depend on the opMode to spin (TeleOp update loop could re-check)
+                // Or we can just sleep briefly (ugly but effective for init).
+                // Actually VisionPortal usually starts streaming pretty quick.
+                // We'll add a helper method the user can call or call it on first poll.
+            }
         } catch (Exception e) {
             RobotLog.ee(TAG, "VisionPortal start failed: %s", e.getMessage());
             aprilTagProcessor = null;
@@ -124,6 +150,10 @@ public final class AprilTagCamera implements AutoCloseable {
         return snapshot;
     }
 
+    public boolean isStreaming() {
+        return visionPortal != null && visionPortal.getCameraState() == CameraState.STREAMING;
+    }
+
     public void publishDetections() {
         JulesStreamBus bus = streamBus;
         List<TagObservation> observations = latestObservations;
@@ -142,6 +172,36 @@ public final class AprilTagCamera implements AutoCloseable {
 
     public int getLastDetectionCount() {
         return latestObservations.size();
+    }
+
+    public void configureCameraControls() {
+        VisionPortal portal = visionPortal;
+        if (portal == null) return;
+
+        // Fixed Focus (Infinity)
+        FocusControl focus = portal.getCameraControl(FocusControl.class);
+        if (focus != null) {
+            if (focus.isModeSupported(FocusControl.Mode.Fixed)) {
+                focus.setMode(FocusControl.Mode.Fixed);
+            }
+            // Try to set focus distance to 0.0 (Infinity) if supported
+            if (focus.isFocusLengthSupported()) {
+                focus.setFocusLength(0.0); 
+            }
+        }
+
+        // Digital Zoom (Attempting via PtzControl as ZoomControl is missing)
+        // Zoom is usually index based in PtzControl
+        PtzControl ptz = portal.getCameraControl(PtzControl.class);
+        if (ptz != null) {
+            int minZoom = ptz.getMinZoom();
+            int maxZoom = ptz.getMaxZoom();
+            // User Request: "Widen the picture". Set to MIN zoom (Widest FOV).
+            int targetZoom = minZoom;
+            if (targetZoom >= minZoom && targetZoom <= maxZoom) {
+                 ptz.setZoom(targetZoom);
+            }
+        }
     }
 
     public void setManualExposure(int exposureMs, int gain) {

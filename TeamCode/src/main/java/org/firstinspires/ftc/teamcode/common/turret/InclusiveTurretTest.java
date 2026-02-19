@@ -49,7 +49,7 @@ public class InclusiveTurretTest extends LinearOpMode {
 
     // Gear ratio constants (matched to BjornTele)
     private static final double MOTOR_TICKS_PER_REV = 28.0;
-    private static final double TURRET_GEAR_REDUCTION = 75.52; // Actual ratio (5.23 * 3.61 * 4)
+    private static final double TURRET_GEAR_REDUCTION = 48; // Actual ratio (5.23 * 3.61 * 4)
     private static final double TURRET_TICKS_PER_DEGREE = (MOTOR_TICKS_PER_REV * TURRET_GEAR_REDUCTION) / 360.0;
 
     // --- Tuned PID Constants (from Auto-Tuner v5) ---
