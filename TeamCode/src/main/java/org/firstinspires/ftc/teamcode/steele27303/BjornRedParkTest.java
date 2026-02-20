@@ -15,7 +15,7 @@ import org.firstinspires.ftc.teamcode.common.BjornConstants;
 import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
 import org.firstinspires.ftc.teamcode.common.turret.TurretEstimator;
 import org.firstinspires.ftc.teamcode.common.turret.GoalCalculator;
-import org.firstinspires.ftc.teamcode.common.BjornPersistence;
+
 
 @Autonomous(name = "Bjorn Red Park Test", group = "Test")
 public class BjornRedParkTest extends OpMode {

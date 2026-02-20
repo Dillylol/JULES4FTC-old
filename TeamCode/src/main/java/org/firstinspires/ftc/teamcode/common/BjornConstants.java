@@ -9,179 +9,197 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
  * Autonomous code can reference the same definitions.
  */
 public final class BjornConstants {
-    private BjornConstants() {
-        // Utility class
-    }
-
-    public static final class Motors {
-        private Motors() {
+        private BjornConstants() {
+                // Utility class
         }
 
-        // Hardware names
-        public static final String FRONT_LEFT = "lf";
-        public static final String FRONT_RIGHT = "rf";
-        public static final String BACK_LEFT = "lr";
-        public static final String BACK_RIGHT = "rr";
-        public static final String INTAKE = "Intake";
-        public static final String WHEEL = "Wheel";
-        public static final String WHEEL2 = "Wheel2";
-        public static final String TURRET = "Turret";
-        public static final String GRIP1 = "Grip1";
-        public static final String GRIP2 = "Grip2";
+        public static final class Motors {
+                private Motors() {
+                }
 
+                // Hardware names
+                public static final String FRONT_LEFT = "lf";
+                public static final String FRONT_RIGHT = "rf";
+                public static final String BACK_LEFT = "lr";
+                public static final String BACK_RIGHT = "rr";
+                public static final String INTAKE = "Intake";
+                public static final String WHEEL = "Wheel";
+                public static final String WHEEL2 = "Wheel2";
+                public static final String TURRET = "Turret";
+                public static final String GRIP1 = "Grip1";
+                public static final String GRIP2 = "Grip2";
 
-        // Default behaviors
-        // public static final DcMotor.Direction DRIVE_DIRECTION =
-        // DcMotor.Direction.FORWARD; // Removed
-        public static final DcMotor.ZeroPowerBehavior DRIVE_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
+                // Default behaviors
+                // public static final DcMotor.Direction DRIVE_DIRECTION =
+                // DcMotor.Direction.FORWARD; // Removed
+                public static final DcMotor.ZeroPowerBehavior DRIVE_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
 
-        public static final DcMotor.Direction INTAKE_DIRECTION = DcMotor.Direction.REVERSE;
-        public static final DcMotor.ZeroPowerBehavior INTAKE_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
-        public static final DcMotor.Direction WHEEL2_DIRECTION = DcMotor.Direction.REVERSE; // flip if needed
-        public static final DcMotor.Direction WHEEL_DIRECTION = DcMotor.Direction.REVERSE; // flip if needed
-        public static final DcMotor.Direction TURRET_DIRECTION = DcMotor.Direction.FORWARD;
-        public static final DcMotor.ZeroPowerBehavior TURRET_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
-        /**
-         * Encoder direction multiplier for turret angle calculation.
-         * FTC SDK motor direction only affects setPower(), NOT getCurrentPosition().
-         * Set to -1.0 to invert encoder reading so 0° = Left, positive = Right.
-         */
-        public static final double TURRET_ENCODER_DIRECTION = -1.0;
-        /**
-         * Power direction multiplier for turret PID output.
-         * Set to -1.0 to invert power output if the PID drives the turret the wrong way.
-         */
-        public static final double TURRET_POWER_DIRECTION = -1.0;
+                public static final DcMotor.Direction INTAKE_DIRECTION = DcMotor.Direction.REVERSE;
+                public static final DcMotor.ZeroPowerBehavior INTAKE_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
+                public static final DcMotor.Direction WHEEL2_DIRECTION = DcMotor.Direction.REVERSE; // flip if needed
+                public static final DcMotor.Direction WHEEL_DIRECTION = DcMotor.Direction.REVERSE; // flip if needed
+                public static final DcMotor.Direction TURRET_DIRECTION = DcMotor.Direction.FORWARD;
+                public static final DcMotor.ZeroPowerBehavior TURRET_ZERO_POWER = DcMotor.ZeroPowerBehavior.BRAKE;
+                /**
+                 * Encoder direction multiplier for turret angle calculation.
+                 * FTC SDK motor direction only affects setPower(), NOT getCurrentPosition().
+                 * Set to -1.0 to invert encoder reading so 0° = Left, positive = Right.
+                 */
+                public static final double TURRET_ENCODER_DIRECTION = -1.0;
+                /**
+                 * Power direction multiplier for turret PID output.
+                 * Set to -1.0 to invert power output if the PID drives the turret the wrong
+                 * way.
+                 */
+                public static final double TURRET_POWER_DIRECTION = -1.0;
 
-        // Turret Limits
-        public static final double TURRET_MIN_DEG = 0.0;
-        public static final double TURRET_MAX_DEG = 180.0;
-        public static final DcMotorSimple.Direction GRIP1_DIRECTION = DcMotorSimple.Direction.REVERSE;
-        public static final DcMotorSimple.Direction GRIP2_DIRECTION = DcMotorSimple.Direction.FORWARD;
-    }
+                // Turret Limits
+                public static final double TURRET_MIN_DEG = 0.0;
+                public static final double TURRET_MAX_DEG = 180.0;
 
-    public static final class GearRatios {
-        private GearRatios() {
+                // Turret physical offset from robot center of rotation (inches)
+                // MEASURE THESE ON YOUR ROBOT - even 2-3 inches causes ~3° error at 70 inches
+                public static final double TURRET_OFFSET_X = 0.0; // Forward offset (positive = toward front)
+                public static final double TURRET_OFFSET_Y = 0.0; // Lateral offset (positive = toward left)
+                public static final DcMotorSimple.Direction GRIP1_DIRECTION = DcMotorSimple.Direction.REVERSE;
+                public static final DcMotorSimple.Direction GRIP2_DIRECTION = DcMotorSimple.Direction.FORWARD;
         }
 
-        public static final double DRIVE = 1.0;
-        public static final double INTAKE = 1.0;
-        public static final double WHEEL = 1.0;
-        public static final double TURRET = 1.0;
-    }
+        public static final class GearRatios {
+                private GearRatios() {
+                }
 
-    public static final class Sensors {
-        private Sensors() {
+                public static final double DRIVE = 1.0;
+                public static final double INTAKE = 1.0;
+                public static final double WHEEL = 1.0;
+                public static final double TURRET = 1.0;
         }
 
-        public static final String IMU = "imu";
+        public static final class Sensors {
+                private Sensors() {
+                }
 
-    }
+                public static final String IMU = "imu";
 
-    public static final class Power {
-        private Power() {
         }
 
-        // Nominal battery voltage (12V system baseline)
-        public static final double NOMINAL_BATT_V = 12.0;
+        public static final class Power {
+                private Power() {
+                }
 
-        // RPM added per volt of sag for the shooter (trained by K-tuner)
-        public static final double SHOOTER_K_V_RPM = 0.0; // keep 0.0 as default
+                // Nominal battery voltage (12V system baseline)
+                public static final double NOMINAL_BATT_V = 12.0;
 
-        // Max RPM change per update step for ramping, to reduce current spikes
-        public static final int SHOOTER_MAX_RPM_STEP_PER_UPDATE = 250; // tune as needed
+                // RPM added per volt of sag for the shooter (trained by K-tuner)
+                public static final double SHOOTER_K_V_RPM = 0.0; // keep 0.0 as default
 
-        public static volatile long SHOOTER_RAMP_DURATION_MS = 3000L;
+                // Max RPM change per update step for ramping, to reduce current spikes
+                public static final int SHOOTER_MAX_RPM_STEP_PER_UPDATE = 250; // tune as needed
 
-        // S-Curve Ramp Tuning (Live Tunable)
-        public static double RAMP_COEF = 0.00025;
-        public static double RAMP_MIN_RATE = 400.0;
+                public static volatile long SHOOTER_RAMP_DURATION_MS = 3000L;
 
-        // Dynamic RPM Calculation Constants
+                // S-Curve Ramp Tuning (Live Tunable)
+                public static double RAMP_COEF = 0.00025;
+                public static double RAMP_MIN_RATE = 400.0;
 
-        public static final double SHOOTER_RPM_SLOPE_CV = 116.4042383594456;
-        public static final double SHOOTER_RPM_OFFSET_CV = 2084.2966941424975;
-        
-        // Swyft Ranger RPM Constants (Baseline = CV constants)
-        public static final double SHOOTER_RPM_SLOPE_RANGER = 116.4042383594456;
-        public static final double SHOOTER_RPM_OFFSET_RANGER = 2084.2966941424975;
+                // Dynamic RPM Calculation Constants
 
-        public static final double SHOOTER_MIN_RPM = 1000.0; // Lower bound for valid shots
-        public static final double SHOOTER_MAX_RPM = 6000.0; // Safety cap
-    }
+                public static final double SHOOTER_RPM_SLOPE_CV = 116.4042383594456;
+                public static final double SHOOTER_RPM_OFFSET_CV = 2084.2966941424975;
 
-    public static final class Auto {
-        private Auto() {
+                // Swyft Ranger RPM Constants (Baseline = CV constants)
+                public static final double SHOOTER_RPM_SLOPE_RANGER = 116.4042383594456;
+                public static final double SHOOTER_RPM_OFFSET_RANGER = 2084.2966941424975;
+
+                public static final double SHOOTER_MIN_RPM = 1000.0; // Lower bound for valid shots
+                public static final double SHOOTER_MAX_RPM = 6000.0; // Safety cap
         }
 
-        // End Poses for Auto-Drive (PedroPathing)
-        // Blue: Parks at (60, 36) facing 0° (ParkTest verified)
-        // Red: Parks at (84, 36) facing 180° (Mirrored from Blue)
-        public static final com.pedropathing.geometry.Pose BLUE_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
-                60.0,
-                36.0, Math.toRadians(0)); // Matches BjornBlueParkTest
-        public static final com.pedropathing.geometry.Pose RED_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
-                96.0,
-                72.0, Math.toRadians(0)); // Matches BjornRedGoalAuto Path 10 End
+        public static final class Auto {
+                private Auto() {
+                }
 
-        public static final com.pedropathing.geometry.Pose BLUE_AUTO_START_POSE = new com.pedropathing.geometry.Pose(0,
-                0, Math.toRadians(265));
-        public static final com.pedropathing.geometry.Pose RED_AUTO_START_POSE = new com.pedropathing.geometry.Pose(0,
-                0, Math.toRadians(-85));
-    }
+                // End Poses for Auto-Drive (PedroPathing)
+                public static final com.pedropathing.geometry.Pose RED_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
+                                102.0,
+                                66.0, Math.toRadians(0)); // Matches BjornAutoRed park pose
+                public static final com.pedropathing.geometry.Pose BLUE_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
+                                42.0,
+                                66.0, Math.toRadians(180)); // Matches BjornAutoBlue park pose
 
-    public static final class Servos {
-        private Servos() {
-        }
-    }
-
-    public static final class AutoPoses {
-        private AutoPoses() {
+                public static final com.pedropathing.geometry.Pose BLUE_AUTO_START_POSE = new com.pedropathing.geometry.Pose(
+                                0,
+                                0, Math.toRadians(265));
+                public static final com.pedropathing.geometry.Pose RED_AUTO_START_POSE = new com.pedropathing.geometry.Pose(
+                                0,
+                                0, Math.toRadians(-85));
         }
 
-        public static final class Blue {
-            private Blue() {
-            }
-
-            public static final com.pedropathing.geometry.Pose START = new com.pedropathing.geometry.Pose(0, 0,
-                    Math.toRadians(265));
-            public static final com.pedropathing.geometry.Pose SHOOT_ZONE = new com.pedropathing.geometry.Pose(0, 25,
-                    Math.toRadians(-85));
-            public static final com.pedropathing.geometry.Pose GLANCE_POINT = new com.pedropathing.geometry.Pose(0, 30,
-                    Math.toRadians(-85)); // TODO: Tune
-            public static final com.pedropathing.geometry.Pose ROW_START = new com.pedropathing.geometry.Pose(10, 30,
-                    Math.toRadians(-85)); // TODO: Tune
-            public static final com.pedropathing.geometry.Pose ROW1 = new com.pedropathing.geometry.Pose(12, 36,
-                    Math.toRadians(0)); // TODO: Tune
-            public static final com.pedropathing.geometry.Pose ROW2 = new com.pedropathing.geometry.Pose(12, 24,
-                    Math.toRadians(0)); // TODO: Tune
-            public static final com.pedropathing.geometry.Pose ROW3 = new com.pedropathing.geometry.Pose(12, 12,
-                    Math.toRadians(0)); // TODO: Tune
-            public static final com.pedropathing.geometry.Pose ALIGN1 = new com.pedropathing.geometry.Pose(22.6, 37.7,
-                    Math.toRadians(-58));
-            public static final com.pedropathing.geometry.Pose GRAB1 = new com.pedropathing.geometry.Pose(32.9, 16,
-                    Math.toRadians(-58));
-            public static final com.pedropathing.geometry.Pose ALIGN1_BACK = new com.pedropathing.geometry.Pose(23, 31,
-                    Math.toRadians(-58));
-            public static final com.pedropathing.geometry.Pose PARK = new com.pedropathing.geometry.Pose(28.6, 48.7,
-                    Math.toRadians(-145));
-        }
-    }
-
-    public static final class FieldPositions {
-        private FieldPositions() {
+        public static final class Servos {
+                private Servos() {
+                }
         }
 
-        // Scoring Zone Target Coordinates (Inches)
-        // These are the fixed field positions where the turret should aim
-        public static final double BLUE_SCORING_X = 15.0;
-        public static final double BLUE_SCORING_Y = 135.0;
-        
-        public static final double RED_SCORING_X = 129.0;  // Mirrored from blue (144 - 15)
-        public static final double RED_SCORING_Y = 135.0;
-        
-        // Legacy Goal Poses (kept for reference)
-        public static final com.pedropathing.geometry.Pose RED_GOAL = new com.pedropathing.geometry.Pose(60, 60, 0); 
-        public static final com.pedropathing.geometry.Pose BLUE_GOAL = new com.pedropathing.geometry.Pose(-60, 60, 0);
-    }
+        public static final class AutoPoses {
+                private AutoPoses() {
+                }
+
+                public static final class Blue {
+                        private Blue() {
+                        }
+
+                        public static final com.pedropathing.geometry.Pose START = new com.pedropathing.geometry.Pose(0,
+                                        0,
+                                        Math.toRadians(265));
+                        public static final com.pedropathing.geometry.Pose SHOOT_ZONE = new com.pedropathing.geometry.Pose(
+                                        0, 25,
+                                        Math.toRadians(-85));
+                        public static final com.pedropathing.geometry.Pose GLANCE_POINT = new com.pedropathing.geometry.Pose(
+                                        0, 30,
+                                        Math.toRadians(-85)); // TODO: Tune
+                        public static final com.pedropathing.geometry.Pose ROW_START = new com.pedropathing.geometry.Pose(
+                                        10, 30,
+                                        Math.toRadians(-85)); // TODO: Tune
+                        public static final com.pedropathing.geometry.Pose ROW1 = new com.pedropathing.geometry.Pose(12,
+                                        36,
+                                        Math.toRadians(0)); // TODO: Tune
+                        public static final com.pedropathing.geometry.Pose ROW2 = new com.pedropathing.geometry.Pose(12,
+                                        24,
+                                        Math.toRadians(0)); // TODO: Tune
+                        public static final com.pedropathing.geometry.Pose ROW3 = new com.pedropathing.geometry.Pose(12,
+                                        12,
+                                        Math.toRadians(0)); // TODO: Tune
+                        public static final com.pedropathing.geometry.Pose ALIGN1 = new com.pedropathing.geometry.Pose(
+                                        22.6, 37.7,
+                                        Math.toRadians(-58));
+                        public static final com.pedropathing.geometry.Pose GRAB1 = new com.pedropathing.geometry.Pose(
+                                        32.9, 16,
+                                        Math.toRadians(-58));
+                        public static final com.pedropathing.geometry.Pose ALIGN1_BACK = new com.pedropathing.geometry.Pose(
+                                        23, 31,
+                                        Math.toRadians(-58));
+                        public static final com.pedropathing.geometry.Pose PARK = new com.pedropathing.geometry.Pose(
+                                        28.6, 48.7,
+                                        Math.toRadians(-145));
+                }
+        }
+
+        public static final class FieldPositions {
+                private FieldPositions() {
+                }
+
+                // Scoring Zone Target Coordinates (Inches)
+                // These are the fixed field positions where the turret should aim
+                public static final double BLUE_SCORING_X = 15.0;
+                public static final double BLUE_SCORING_Y = 135.0;
+
+                public static final double RED_SCORING_X = 129.0; // Mirrored from blue (144 - 15)
+                public static final double RED_SCORING_Y = 135.0;
+
+                // Legacy Goal Poses (kept for reference)
+                public static final com.pedropathing.geometry.Pose RED_GOAL = new com.pedropathing.geometry.Pose(60, 60,
+                                0);
+                public static final com.pedropathing.geometry.Pose BLUE_GOAL = new com.pedropathing.geometry.Pose(-60,
+                                60, 0);
+        }
 }

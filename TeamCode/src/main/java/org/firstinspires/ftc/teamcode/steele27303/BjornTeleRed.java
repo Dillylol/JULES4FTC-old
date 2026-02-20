@@ -23,7 +23,7 @@ import org.firstinspires.ftc.teamcode.configurables.TurretConfigurables;
 import org.firstinspires.ftc.teamcode.common.turret.TurretEstimator;
 import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
 import org.firstinspires.ftc.teamcode.common.turret.GoalCalculator;
-import org.firstinspires.ftc.teamcode.common.BjornPersistence;
+
 
 import java.util.List;
 
@@ -93,12 +93,11 @@ public class BjornTeleRed extends BjornTeleBase {
     private boolean wasManualControl = false;
     private boolean autoShootEnabled = false;
     private boolean cameraConfigured = false;
-    
+
     // --- Turret Control System ---
 
     private TurretControl turretControl;
     private GoalCalculator goalCalculator;
-
 
     // --- Input State ---
     private boolean g1LbPrev = false;
@@ -167,20 +166,19 @@ public class BjornTeleRed extends BjornTeleBase {
 
         // --- Subsystems (From Base) ---
         initSubsystems();
-        
+
         // --- Turret Control System (Inline) ---
         // Initialize directly from encoder (persistence via hardware)
         turretControl = new TurretControl(turret, imu);
         turretControl.resetAngle(90.0); // Force start at 90° (from Auto Homing)
-        
+
         // --- Initialize Goal Calculator ---
         // Use hardcoded Auto End Pose as start for triangulation
         Pose autoStartPose = BjornConstants.Auto.RED_AUTO_END_POSE;
 
         goalCalculator = new GoalCalculator(
-            BjornConstants.FieldPositions.RED_SCORING_X,
-            BjornConstants.FieldPositions.RED_SCORING_Y
-        );
+                BjornConstants.FieldPositions.RED_SCORING_X,
+                BjornConstants.FieldPositions.RED_SCORING_Y);
 
         // Pass Camera to Shooter for CV calculation
         shooter.setCamera(aprilTagCamera, GOAL_TAG_ID);
@@ -198,9 +196,10 @@ public class BjornTeleRed extends BjornTeleBase {
         lastLoopTime = now;
 
         // --- Update Systems (Inline) ---
-        // Always update Pedro follower to maintain localization (needed for position tracking)
+        // Always update Pedro follower to maintain localization (needed for position
+        // tracking)
         follower.update();
-        
+
         // Feed current robot pose to turret control for position tracking
         turretControl.updateRobotPose(follower.getPose());
 
@@ -224,7 +223,7 @@ public class BjornTeleRed extends BjornTeleBase {
         // --- Telemetry ---
         // --- Telemetry ---
         telemetry.addData("Alliance", "RED");
-        
+
         telemetry.addLine("--- TRACKING DEBUG (PEDRO) ---");
         telemetry.addData("Tracking Active", turretControl.isPositionTrackingEnabled() ? "YES" : "NO");
 
@@ -246,29 +245,33 @@ public class BjornTeleRed extends BjornTeleBase {
         // Actual Goal Heading (Geometry) - Verify GoalCalculator logic independently
         double goalX = BjornConstants.FieldPositions.RED_SCORING_X;
         double goalY = BjornConstants.FieldPositions.RED_SCORING_Y;
-        
+
         double gDx = goalX - follower.getPose().getX();
         double gDy = goalY - follower.getPose().getY();
         double goalFieldHeading = Math.toDegrees(Math.atan2(gDy, gDx));
         // Normalize
-        while (goalFieldHeading > 180) goalFieldHeading -= 360;
-        while (goalFieldHeading <= -180) goalFieldHeading += 360;
+        while (goalFieldHeading > 180)
+            goalFieldHeading -= 360;
+        while (goalFieldHeading <= -180)
+            goalFieldHeading += 360;
 
         telemetry.addData("Goal Heading (Field)", "%.1f°", goalFieldHeading);
         telemetry.addData("Est. Field Heading", "%.1f°", estFieldHeading);
 
         // 4. Tracking Error (Target - Current) [Robot Frame]
         double error = targetRelDeg - turretRelDeg;
-        while (error > 180) error -= 360;
-        while (error <= -180) error += 360;
+        while (error > 180)
+            error -= 360;
+        while (error <= -180)
+            error += 360;
 
         telemetry.addData("Tracking Error", "%.1f°", error);
-        
+
         telemetry.addLine("--- SYSTEMS ---");
         telemetry.addData("Auto-Shoot", autoShootEnabled ? "ON" : "OFF");
         telemetry.addData("Auto-Drive", autoDriveActive ? "ACTIVE" : "OFF");
         if (turretControl.isPositionTrackingEnabled()) {
-             telemetry.addData("Distance to Target", "%.1f in", turretControl.getDistanceToTarget());
+            telemetry.addData("Distance to Target", "%.1f in", turretControl.getDistanceToTarget());
         }
         addSubsystemTelemetry(nowMs);
         telemetry.update();
@@ -278,58 +281,58 @@ public class BjornTeleRed extends BjornTeleBase {
 
     private void updateTurret(double dt) {
         long nowMs = System.currentTimeMillis();
-        
+
         turretAngleDeg = turretControl.getCurrentAngle();
 
         // --- G2: A toggles Position Tracking ---
         if (gamepad2.a && !g2APrev) {
-            boolean newState = !turretControl.isPositionTrackingEnabled();
-            turretControl.setPositionTrackingEnabled(newState);
-            if (newState) {
+            positionTrackingEnabled = !positionTrackingEnabled;
+            turretControl.setPositionTrackingEnabled(positionTrackingEnabled);
+            if (positionTrackingEnabled) {
                 // Set target to RED scoring position from constants
                 turretControl.setTargetPosition(
-                    BjornConstants.FieldPositions.RED_SCORING_X,
-                    BjornConstants.FieldPositions.RED_SCORING_Y
-                );
+                        BjornConstants.FieldPositions.RED_SCORING_X,
+                        BjornConstants.FieldPositions.RED_SCORING_Y);
             }
         }
         g2APrev = gamepad2.a;
         dpadUpPrev = gamepad1.dpad_up;
 
-        // --- Manual Control ---
-        // G2: Left stick X (full authority)
-        // G1: D-Pad L/R (limited authority)
-        double g2Input = gamepad2.left_stick_x;
-        double g1Input = 0.0;
-        if (gamepad1.dpad_left)
-            g1Input = -1.0;
-        else if (gamepad1.dpad_right)
-            g1Input = 1.0;
+        // --- SAFETY LOCKOUT: Manual control is ONLY allowed when tracking is OFF ---
+        if (!positionTrackingEnabled) {
+            // --- Manual Control ---
+            // G2: Left stick X (full authority)
+            // G1: D-Pad L/R (limited authority)
+            double g2Input = gamepad2.left_stick_x;
+            double g1Input = 0.0;
+            if (gamepad1.dpad_left)
+                g1Input = -1.0;
+            else if (gamepad1.dpad_right)
+                g1Input = 1.0;
 
-        // Combine inputs (G2 has priority if both active)
-        double stickInput = (Math.abs(g2Input) > 0.1) ? g2Input : g1Input * (G1_TURRET_POWER / G2_TURRET_POWER);
-        boolean isManualControl = Math.abs(stickInput) > 0.1;
+            // Combine inputs (G2 has priority if both active)
+            double stickInput = (Math.abs(g2Input) > 0.1) ? g2Input : g1Input * (G1_TURRET_POWER / G2_TURRET_POWER);
+            boolean isManualControl = Math.abs(stickInput) > 0.1;
 
-        if (isManualControl) {
-            double headingDelta = stickInput * MANUAL_RATE_DEG_PER_SEC * dt;
-            targetFieldHeading += headingDelta;
-            targetFieldHeading = Range.clip(targetFieldHeading, LIMIT_MIN, LIMIT_MAX);
-            turretControl.setTargetAngle(targetFieldHeading);
-            wasManualControl = true;
-        } else if (wasManualControl) {
-            // Just released - lock to current belief
-            targetFieldHeading = turretControl.getCurrentAngle();
-            turretControl.setTargetAngle(targetFieldHeading);
-            wasManualControl = false;
-        }
-
-        // --- Position Tracking Update ---
-        // Dynamically update goal angle if position tracking is enabled
-        if (positionTrackingEnabled) {
+            if (isManualControl) {
+                double headingDelta = stickInput * MANUAL_RATE_DEG_PER_SEC * dt;
+                targetFieldHeading += headingDelta;
+                targetFieldHeading = Range.clip(targetFieldHeading, LIMIT_MIN, LIMIT_MAX);
+                turretControl.setTargetAngle(targetFieldHeading);
+                wasManualControl = true;
+            } else if (wasManualControl) {
+                // Just released - lock to current belief
+                targetFieldHeading = turretControl.getCurrentAngle();
+                turretControl.setTargetAngle(targetFieldHeading);
+                wasManualControl = false;
+            }
+        } else {
+            // --- Position Tracking: GoalCalculator is the SOLE source of targeting ---
             double goalAngle = goalCalculator.getTurretAngleToGoal(follower.getPose());
             turretControl.setTargetAngle(goalAngle);
+            wasManualControl = false; // Reset so manual doesn't snap on toggle-off
         }
-        
+
         aprilTagCamera.pollDetections(); // Keep camera active for shooter
 
         // --- Run TurretControl ---
@@ -369,11 +372,12 @@ public class BjornTeleRed extends BjornTeleBase {
         if (gamepad1.right_bumper) {
             if (!autoDriveActive) {
                 // Restore logic: Use savedPose to restart Pedro pathing
-                // This assumes manual driving does not update Pedro's pose (since update() is paused).
+                // This assumes manual driving does not update Pedro's pose (since update() is
+                // paused).
                 // We use the last known "good" pose from when auto was active or initialized.
-                
+
                 follower.setStartingPose(savedPose);
-                
+
                 Path path = new Path(new BezierLine(savedPose, autoDriveTargetPose));
                 path.setLinearHeadingInterpolation(savedPose.getHeading(), autoDriveTargetPose.getHeading());
                 follower.followPath(path, true);
@@ -384,11 +388,11 @@ public class BjornTeleRed extends BjornTeleBase {
             if (autoDriveActive) {
                 // Save state before killing
                 savedPose = follower.getPose();
-                
+
                 // "Kill" (Stop following)
-                follower.breakFollowing(); 
+                follower.breakFollowing();
                 // Stop calling update() in loop logic by setting flag false.
-                
+
                 autoDriveActive = false;
             }
         }

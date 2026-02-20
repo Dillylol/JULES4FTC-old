@@ -23,7 +23,7 @@ import org.firstinspires.ftc.teamcode.configurables.TurretConfigurables;
 import org.firstinspires.ftc.teamcode.common.turret.TurretEstimator;
 import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
 import org.firstinspires.ftc.teamcode.common.turret.GoalCalculator;
-import org.firstinspires.ftc.teamcode.common.BjornPersistence;
+
 
 import java.util.List;
 
@@ -93,12 +93,11 @@ public class BjornTeleBlue extends BjornTeleBase {
     private boolean wasManualControl = false;
     private boolean autoShootEnabled = false;
     private boolean cameraConfigured = false;
-    
+
     // --- Turret Control System ---
 
     private TurretControl turretControl;
     private GoalCalculator goalCalculator;
-
 
     // --- Input State ---
     private boolean g1LbPrev = false;
@@ -167,20 +166,19 @@ public class BjornTeleBlue extends BjornTeleBase {
 
         // --- Subsystems (From Base) ---
         initSubsystems();
-        
+
         // --- Turret Control System (Inline) ---
         // Initialize directly from encoder (persistence via hardware)
         turretControl = new TurretControl(turret, imu);
         turretControl.resetAngle(90.0); // Force start at 90° (from Auto Homing)
-        
+
         // --- Initialize Goal Calculator ---
         // Use hardcoded Auto End Pose as start for triangulation
         Pose autoStartPose = BjornConstants.Auto.BLUE_AUTO_END_POSE;
 
         goalCalculator = new GoalCalculator(
-            BjornConstants.FieldPositions.BLUE_SCORING_X,
-            BjornConstants.FieldPositions.BLUE_SCORING_Y
-        );
+                BjornConstants.FieldPositions.BLUE_SCORING_X,
+                BjornConstants.FieldPositions.BLUE_SCORING_Y);
 
         // Pass Camera to Shooter for CV calculation
         shooter.setCamera(aprilTagCamera, GOAL_TAG_ID);
@@ -198,9 +196,10 @@ public class BjornTeleBlue extends BjornTeleBase {
         lastLoopTime = now;
 
         // --- Update Systems (Inline) ---
-        // Always update Pedro follower to maintain localization (needed for position tracking)
+        // Always update Pedro follower to maintain localization (needed for position
+        // tracking)
         follower.update();
-        
+
         // Feed current robot pose to turret control for position tracking
         turretControl.updateRobotPose(follower.getPose());
 
@@ -224,7 +223,7 @@ public class BjornTeleBlue extends BjornTeleBase {
         // --- Telemetry ---
         // --- Telemetry ---
         telemetry.addData("Alliance", "BLUE");
-        
+
         telemetry.addLine("--- TRACKING DEBUG (PEDRO) ---");
         telemetry.addData("Tracking Active", turretControl.isPositionTrackingEnabled() ? "YES" : "NO");
 
@@ -246,29 +245,33 @@ public class BjornTeleBlue extends BjornTeleBase {
         // Actual Goal Heading (Geometry) - Verify GoalCalculator logic independently
         double goalX = BjornConstants.FieldPositions.BLUE_SCORING_X;
         double goalY = BjornConstants.FieldPositions.BLUE_SCORING_Y;
-        
+
         double gDx = goalX - follower.getPose().getX();
         double gDy = goalY - follower.getPose().getY(); // Reversed Y in FTC field? No, standard field coords.
         double goalFieldHeading = Math.toDegrees(Math.atan2(gDy, gDx));
         // Normalize
-        while (goalFieldHeading > 180) goalFieldHeading -= 360;
-        while (goalFieldHeading <= -180) goalFieldHeading += 360;    
+        while (goalFieldHeading > 180)
+            goalFieldHeading -= 360;
+        while (goalFieldHeading <= -180)
+            goalFieldHeading += 360;
 
         telemetry.addData("Goal Heading (Field)", "%.1f°", goalFieldHeading);
         telemetry.addData("Est. Field Heading", "%.1f°", estFieldHeading);
 
         // 4. Tracking Error (Target - Current) [Robot Frame]
         double error = targetRelDeg - turretRelDeg;
-        while (error > 180) error -= 360;
-        while (error <= -180) error += 360;
+        while (error > 180)
+            error -= 360;
+        while (error <= -180)
+            error += 360;
 
         telemetry.addData("Tracking Error", "%.1f°", error);
-        
+
         telemetry.addLine("--- SYSTEMS ---");
         telemetry.addData("Auto-Shoot", autoShootEnabled ? "ON" : "OFF");
         telemetry.addData("Auto-Drive", autoDriveActive ? "ACTIVE" : "OFF");
         if (turretControl.isPositionTrackingEnabled()) {
-             telemetry.addData("Distance to Target", "%.1f in", turretControl.getDistanceToTarget());
+            telemetry.addData("Distance to Target", "%.1f in", turretControl.getDistanceToTarget());
         }
         addSubsystemTelemetry(nowMs);
         telemetry.update();
@@ -278,51 +281,59 @@ public class BjornTeleBlue extends BjornTeleBase {
 
     private void updateTurret(double dt) {
         long nowMs = System.currentTimeMillis();
-        
+
         turretAngleDeg = turretControl.getCurrentAngle();
 
         // --- G2: A toggles Position Tracking ---
         if (gamepad2.a && !g2APrev) {
             positionTrackingEnabled = !positionTrackingEnabled;
-            // No need to set on turretControl since we manage it manually via setTargetAngle
+            turretControl.setPositionTrackingEnabled(positionTrackingEnabled);
+            if (positionTrackingEnabled) {
+                // Set target to BLUE scoring position from constants
+                turretControl.setTargetPosition(
+                        BjornConstants.FieldPositions.BLUE_SCORING_X,
+                        BjornConstants.FieldPositions.BLUE_SCORING_Y);
+            }
         }
         g2APrev = gamepad2.a;
         dpadUpPrev = gamepad1.dpad_up;
 
-        // --- Manual Control ---
-        // G2: Left stick X (full authority)
-        // G1: D-Pad L/R (limited authority)
-        double turretInput = gamepad2.left_stick_x;
-        double g1Input = 0.0;
-        if (gamepad1.dpad_left)
-            g1Input = -1.0;
-        else if (gamepad1.dpad_right)
-            g1Input = 1.0;
+        // --- SAFETY LOCKOUT: Manual control is ONLY allowed when tracking is OFF ---
+        if (!positionTrackingEnabled) {
+            // --- Manual Control ---
+            // G2: Left stick X (full authority)
+            // G1: D-Pad L/R (limited authority)
+            double turretInput = gamepad2.left_stick_x;
+            double g1Input = 0.0;
+            if (gamepad1.dpad_left)
+                g1Input = -1.0;
+            else if (gamepad1.dpad_right)
+                g1Input = 1.0;
 
-        // Combine inputs (G2 has priority if both active)
-        double stickInput = (Math.abs(turretInput) > 0.1) ? turretInput : g1Input * (G1_TURRET_POWER / G2_TURRET_POWER);
-        boolean isManualControl = Math.abs(stickInput) > 0.1;
+            // Combine inputs (G2 has priority if both active)
+            double stickInput = (Math.abs(turretInput) > 0.1) ? turretInput
+                    : g1Input * (G1_TURRET_POWER / G2_TURRET_POWER);
+            boolean isManualControl = Math.abs(stickInput) > 0.1;
 
-        if (isManualControl) {
-            double headingDelta = stickInput * MANUAL_RATE_DEG_PER_SEC * dt;
-            targetFieldHeading += headingDelta;
-            targetFieldHeading = Range.clip(targetFieldHeading, LIMIT_MIN, LIMIT_MAX);
-            turretControl.setTargetAngle(targetFieldHeading);
-            wasManualControl = true;
-        } else if (wasManualControl) {
-            // Just released - lock to current belief
-            targetFieldHeading = turretControl.getCurrentAngle();
-            turretControl.setTargetAngle(targetFieldHeading);
-            wasManualControl = false;
-        }
-
-        // --- Position Tracking Update ---
-        // Dynamically update goal angle if position tracking is enabled
-        if (positionTrackingEnabled) {
+            if (isManualControl) {
+                double headingDelta = stickInput * MANUAL_RATE_DEG_PER_SEC * dt;
+                targetFieldHeading += headingDelta;
+                targetFieldHeading = Range.clip(targetFieldHeading, LIMIT_MIN, LIMIT_MAX);
+                turretControl.setTargetAngle(targetFieldHeading);
+                wasManualControl = true;
+            } else if (wasManualControl) {
+                // Just released - lock to current belief
+                targetFieldHeading = turretControl.getCurrentAngle();
+                turretControl.setTargetAngle(targetFieldHeading);
+                wasManualControl = false;
+            }
+        } else {
+            // --- Position Tracking: GoalCalculator is the SOLE source of targeting ---
             double goalAngle = goalCalculator.getTurretAngleToGoal(follower.getPose());
             turretControl.setTargetAngle(goalAngle);
+            wasManualControl = false; // Reset so manual doesn't snap on toggle-off
         }
-        
+
         aprilTagCamera.pollDetections(); // Keep camera active for shooter
 
         // --- Run TurretControl ---
@@ -362,37 +373,45 @@ public class BjornTeleBlue extends BjornTeleBase {
         if (gamepad1.right_bumper) {
             if (!autoDriveActive) {
                 // Restore logic: Pedro needs to know where we are to start pathing properly
-                // But ideally, we want to START from where we are now (savedPose updated on release)?
+                // But ideally, we want to START from where we are now (savedPose updated on
+                // release)?
                 // Actually, if we are manual driving, the robot MOVES. Pedro's "pose" is stale.
                 // WE NEED to reset Pedro's pose to the current estimated pose (from odometry)?
                 // If localizers are running, follower.getPose() IS correct.
-                // WAIT. If we stop calling follower.update(), does the localizer stop updating? 
-                // "follower.update()" usually calls "drive.update()" which calls "localizer.update()".
+                // WAIT. If we stop calling follower.update(), does the localizer stop updating?
+                // "follower.update()" usually calls "drive.update()" which calls
+                // "localizer.update()".
                 // IF WE STOP CALLING UPDATE, WE LOSE LOCALIZATION.
-                
-                // CRITICAL FIX: We must keep localization running, but disable DRIVE MOTOR output from Pedro.
+
+                // CRITICAL FIX: We must keep localization running, but disable DRIVE MOTOR
+                // output from Pedro.
                 // BUT the user asked to "kill pedro".
                 // If we kill pedro, we lose position.
-                // If we assume manual driving updates position via Odometry... we need the localizer running.
-                
+                // If we assume manual driving updates position via Odometry... we need the
+                // localizer running.
+
                 // Let's stick to the prompt: "save the pose states, kill pedro when its not on"
-                // If we kill it, we assume we resume from limit/auto-end-pose? Or do we assume we need to re-seed?
-                // "Pedro conflicts with it... causing robot to stutter" -> implies motor contention.
-                
+                // If we kill it, we assume we resume from limit/auto-end-pose? Or do we assume
+                // we need to re-seed?
+                // "Pedro conflicts with it... causing robot to stutter" -> implies motor
+                // contention.
+
                 // If we stop calling update(), Pedro won't write to motors.
-                // But next time we start, we need a valid start pose. 
+                // But next time we start, we need a valid start pose.
                 // We will use savedPose (last known valid auto pose) OR we simply reset.
-                
-                // If we assume the driver moved the robot manually, the old Pedro pose is WRONG.
-                // However, without active localization, we don't know the new pose. 
+
+                // If we assume the driver moved the robot manually, the old Pedro pose is
+                // WRONG.
+                // However, without active localization, we don't know the new pose.
                 // The prompt says "save the pose states".
-                
-                // Let's implement exactly as requested: 
-                // 1. Enable: Set start pose to savedPose (which might be stale, but it's what we have).
+
+                // Let's implement exactly as requested:
+                // 1. Enable: Set start pose to savedPose (which might be stale, but it's what
+                // we have).
                 // 2. Disable: Save current pose to savedPose.
-                
+
                 follower.setStartingPose(savedPose);
-                
+
                 Path path = new Path(new BezierLine(savedPose, autoDriveTargetPose));
                 path.setLinearHeadingInterpolation(savedPose.getHeading(), autoDriveTargetPose.getHeading());
                 follower.followPath(path, true);
@@ -403,13 +422,13 @@ public class BjornTeleBlue extends BjornTeleBase {
             if (autoDriveActive) {
                 // Save state before killing
                 savedPose = follower.getPose();
-                
+
                 // "Kill" (Stop following)
-                follower.breakFollowing(); 
-                // We don't call startTeleopDrive() because that might engage lock modes? 
-                // Actually startTeleopDrive just sets drive vector control. 
+                follower.breakFollowing();
+                // We don't call startTeleopDrive() because that might engage lock modes?
+                // Actually startTeleopDrive just sets drive vector control.
                 // We just stop calling update().
-                
+
                 autoDriveActive = false;
             }
         }

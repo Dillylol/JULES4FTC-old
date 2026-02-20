@@ -22,13 +22,14 @@ import org.firstinspires.ftc.teamcode.configurables.TurretConfigurables;
  * Usage:
  * 1. Create instance: new TurretControl(turretMotor, imu)
  * 2. Call update(dt) every loop
- * 3. Set target via setTargetAngle() or enable position tracking via setTargetPosition()
+ * 3. Set target via setTargetAngle() or enable position tracking via
+ * setTargetPosition()
  */
 public class TurretControl {
 
     private final DcMotorEx turretMotor;
     private final IMU imu;
-    
+
     // === State Variables ===
     private double turretAngleDeg = 0.0; // Current turret angle (local frame)
     private double targetFieldHeading = 90.0; // Target in field/world frame
@@ -36,32 +37,32 @@ public class TurretControl {
     private double lastTurretPower = 0.0;
     private double lastTurretError = 0.0;
     private double lastRobotYaw = 0.0;
-    
+
     public enum TargetMode {
         LOCAL, // Target is robot-relative
-        WORLD  // Target is field-relative (compensates for robot yaw)
+        WORLD // Target is field-relative (compensates for robot yaw)
     }
-    
-    private TargetMode targetMode = TargetMode.LOCAL; 
+
+    private TargetMode targetMode = TargetMode.LOCAL;
 
     // === Position Tracking State ===
     private Double targetPositionX = null;
     private Double targetPositionY = null;
     private com.pedropathing.geometry.Pose currentRobotPose = null;
     private boolean positionTrackingEnabled = false;
-    
+
     /**
      * Constructs a new TurretControl instance.
      * 
      * @param turretMotor The turret motor (must have encoder)
-     * @param imu The robot's IMU for heading tracking
+     * @param imu         The robot's IMU for heading tracking
      */
     public TurretControl(DcMotorEx turretMotor, IMU imu) {
         this.turretMotor = turretMotor;
         this.imu = imu;
         this.lastEncoderPos = turretMotor.getCurrentPosition();
     }
-    
+
     /**
      * Updates the turret control loop. Call this every loop iteration.
      * 
@@ -73,32 +74,21 @@ public class TurretControl {
         int currentPos = turretMotor.getCurrentPosition();
         int deltaTicks = currentPos - lastEncoderPos;
         lastEncoderPos = currentPos;
-        turretAngleDeg += (deltaTicks / TurretConfigurables.getTicksPerDegree()) 
-                         * BjornConstants.Motors.TURRET_ENCODER_DIRECTION;
-        
+        turretAngleDeg += (deltaTicks / TurretConfigurables.getTicksPerDegree())
+                * BjornConstants.Motors.TURRET_ENCODER_DIRECTION;
+
         // === Get Robot Rotation ===
         double robotYaw = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);
         double robotRate = (dt > 0) ? (robotYaw - lastRobotYaw) / dt : 0.0;
         lastRobotYaw = robotYaw;
-        
-        // === Position Tracking: Calculate Target Angle from Coordinates ===
-        if (positionTrackingEnabled && currentRobotPose != null 
-            && targetPositionX != null && targetPositionY != null) {
-            
-            double dx = targetPositionX - currentRobotPose.getX();
-            double dy = targetPositionY - currentRobotPose.getY();
-            
-            // Calculate field angle to target
-            double angleToTargetDeg = Math.toDegrees(Math.atan2(dy, dx));
-            
-            // targetFieldHeading is world-frame, will be converted to local in PD
-            targetFieldHeading = angleToTargetDeg;
-        }
-        
+
+        // Position tracking math is now handled exclusively by GoalCalculator
+        // in the TeleOp loop. TurretControl only executes the target it receives.
+
         // === PD Control (World-frame target → Local-frame control) ===
         // === PD Control (Apply Target Mode) ===
         double desiredTurretAngle;
-        
+
         if (targetMode == TargetMode.WORLD) {
             // World Frame: Target - RobotYaw (Subtractive Counter-Rotation)
             desiredTurretAngle = targetFieldHeading - robotYaw;
@@ -108,44 +98,46 @@ public class TurretControl {
         }
 
         // ABSOLUTE SAFETY CLAMP: Ensure target never exceeds physical limits
-        desiredTurretAngle = Range.clip(desiredTurretAngle, 
-                                        TurretConfigurables.limitMin, 
-                                        TurretConfigurables.limitMax);
-        
+        desiredTurretAngle = Range.clip(desiredTurretAngle,
+                TurretConfigurables.limitMin,
+                TurretConfigurables.limitMax);
+
         double error = desiredTurretAngle - turretAngleDeg;
-        
+
         // Deadband: Prevent oscillation
         if (Math.abs(error) < TurretConfigurables.deadband) {
             error = 0;
         }
-        
+
         // PD calculation
         double derivative = (dt > 0) ? (error - lastTurretError) / dt : 0.0;
         double pid = (error * TurretConfigurables.kP) + (derivative * TurretConfigurables.kD);
-        
+
         // Use specific FF gain for tracking mode if enabled
-        double ffGain = positionTrackingEnabled ? 
-                        TurretConfigurables.trackerFFGain : 
-                        TurretConfigurables.robotRotationFFGain;
+        double ffGain = positionTrackingEnabled ? TurretConfigurables.trackerFFGain
+                : TurretConfigurables.robotRotationFFGain;
         double ff = robotRate * ffGain;
-        
+
         double turretPower = pid + ff;
         lastTurretError = error;
-        
+
         // === Standard Limit Enforcement ===
-        if (turretAngleDeg < TurretConfigurables.limitMin && turretPower < 0) turretPower = 0;
-        if (turretAngleDeg > TurretConfigurables.limitMax && turretPower > 0) turretPower = 0;
-        
+        if (turretAngleDeg < TurretConfigurables.limitMin && turretPower < 0)
+            turretPower = 0;
+        if (turretAngleDeg > TurretConfigurables.limitMax && turretPower > 0)
+            turretPower = 0;
+
         // === Clamp and Slew Rate Limit ===
-        if (Double.isNaN(turretPower)) turretPower = 0;
-        turretPower = Range.clip(turretPower, -TurretConfigurables.g2TurretPower, 
-                                              TurretConfigurables.g2TurretPower);
-        
-        double powerDelta = Range.clip(turretPower - lastTurretPower, 
-                                      -TurretConfigurables.maxPowerDelta, 
-                                      TurretConfigurables.maxPowerDelta);
+        if (Double.isNaN(turretPower))
+            turretPower = 0;
+        turretPower = Range.clip(turretPower, -TurretConfigurables.g2TurretPower,
+                TurretConfigurables.g2TurretPower);
+
+        double powerDelta = Range.clip(turretPower - lastTurretPower,
+                -TurretConfigurables.maxPowerDelta,
+                TurretConfigurables.maxPowerDelta);
         double slewPower = lastTurretPower + powerDelta;
-        
+
         // === FORCEFIELD OVERRIDE (Bypasses Slew Rate) ===
         // If we are out of bounds, apply IMMEDIATE corrective force
         if (turretAngleDeg < TurretConfigurables.limitMin) {
@@ -153,15 +145,15 @@ public class TurretControl {
         } else if (turretAngleDeg > TurretConfigurables.limitMax) {
             slewPower = -TurretConfigurables.forcefieldPower; // Hard push left
         }
-        
+
         lastTurretPower = slewPower;
         turretMotor.setPower(slewPower * BjornConstants.Motors.TURRET_POWER_DIRECTION);
-        
+
         return slewPower;
     }
-    
+
     // === Target Setting Methods ===
-    
+
     /**
      * Sets the target angle. Interpretation depends on TargetMode.
      * 
@@ -169,17 +161,17 @@ public class TurretControl {
      */
     public void setTargetAngle(double angle) {
         this.targetFieldHeading = angle;
-        this.positionTrackingEnabled = false;
     }
 
     /**
      * Sets the target mode (LOCAL or WORLD).
+     * 
      * @param mode TargetMode.LOCAL or TargetMode.WORLD
      */
     public void setTargetMode(TargetMode mode) {
         this.targetMode = mode;
     }
-    
+
     /**
      * Gets the current target angle in field coordinates.
      * 
@@ -188,7 +180,7 @@ public class TurretControl {
     public double getTargetAngle() {
         return targetFieldHeading;
     }
-    
+
     /**
      * Sets the target position in field coordinates for position-based tracking.
      * Call setPositionTrackingEnabled(true) to activate.
@@ -200,7 +192,7 @@ public class TurretControl {
         this.targetPositionX = x;
         this.targetPositionY = y;
     }
-    
+
     /**
      * Updates the current robot pose from Pedro Pathing odometry.
      * This should be called every loop to keep tracking accurate.
@@ -210,17 +202,18 @@ public class TurretControl {
     public void updateRobotPose(com.pedropathing.geometry.Pose pose) {
         this.currentRobotPose = pose;
     }
-    
+
     /**
      * Enables or disables position-based tracking mode.
      * When enabled, turret automatically aims at the target position.
      * 
-     * @param enabled True to enable position tracking, false for manual/angle control
+     * @param enabled True to enable position tracking, false for manual/angle
+     *                control
      */
     public void setPositionTrackingEnabled(boolean enabled) {
         this.positionTrackingEnabled = enabled;
     }
-    
+
     /**
      * Checks if position tracking is currently enabled.
      * 
@@ -229,11 +222,9 @@ public class TurretControl {
     public boolean isPositionTrackingEnabled() {
         return positionTrackingEnabled;
     }
-    
-
 
     // === Status Methods ===
-    
+
     /**
      * Gets the current turret angle in local/robot frame.
      * 
@@ -242,7 +233,7 @@ public class TurretControl {
     public double getCurrentAngle() {
         return turretAngleDeg;
     }
-    
+
     /**
      * Gets the current error (target - actual).
      * 
@@ -251,7 +242,7 @@ public class TurretControl {
     public double getError() {
         return lastTurretError;
     }
-    
+
     /**
      * Checks if the turret is locked on target.
      * 
@@ -260,7 +251,7 @@ public class TurretControl {
     public boolean isLocked() {
         return Math.abs(lastTurretError) <= TurretConfigurables.deadband;
     }
-    
+
     /**
      * Calculates the distance to the target position.
      * 
@@ -274,7 +265,7 @@ public class TurretControl {
         double dy = targetPositionY - currentRobotPose.getY();
         return Math.hypot(dx, dy);
     }
-    
+
     /**
      * Resets the turret angle to a known position.
      * Useful after encoder reset or homing.
