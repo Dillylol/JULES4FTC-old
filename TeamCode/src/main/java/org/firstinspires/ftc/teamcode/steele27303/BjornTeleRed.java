@@ -1,9 +1,7 @@
 package org.firstinspires.ftc.teamcode.steele27303;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.geometry.Pose;
-import com.pedropathing.paths.Path;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -12,18 +10,13 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.util.Range;
 
-import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
 import org.firstinspires.ftc.teamcode.common.CameraConfig;
 import org.firstinspires.ftc.teamcode.jules.cv.AprilTagCamera;
 import org.firstinspires.ftc.teamcode.jules.cv.AprilTagCamera.TagObservation;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.configurables.TurretConfigurables;
-import org.firstinspires.ftc.teamcode.common.turret.TurretEstimator;
 import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
-import org.firstinspires.ftc.teamcode.common.turret.GoalCalculator;
-
 
 import java.util.List;
 
@@ -67,43 +60,30 @@ public class BjornTeleRed extends BjornTeleBase {
     private AprilTagCamera aprilTagCamera;
     private static final int GOAL_TAG_ID = CameraConfig.RED_GOAL_TAG_ID;
 
-    // --- Turret Constants ---
-    private static final double MOTOR_TICKS_PER_REV = 28.0;
-    private static final double TURRET_GEAR_REDUCTION = 48.0;
-    private static final double TURRET_TICKS_PER_DEGREE = (MOTOR_TICKS_PER_REV * TURRET_GEAR_REDUCTION) / 360.0;
-
-    private static final double ROBOT_ROTATION_FF_GAIN = 0.0055;
-    // PID/FF/Deadband now from TurretConfigurables
+    // --- Turret Constants (from TurretConfigurables where possible) ---
     private static final double LIMIT_MIN = BjornConstants.Motors.TURRET_MIN_DEG;
     private static final double LIMIT_MAX = BjornConstants.Motors.TURRET_MAX_DEG;
     private static final double MANUAL_RATE_DEG_PER_SEC = 90.0;
-    private static final double APRILTAG_CORRECTION_GAIN = 0.5;
-
     private static final double G2_TURRET_POWER = 1.0;
     private static final double G1_TURRET_POWER = 0.5;
 
     // --- Turret State ---
     private double targetFieldHeading = 90.0;
     private double turretAngleDeg = 0.0;
-    private int lastEncoderPos = 0;
-    private double lastTurretPower = 0.0;
-    private double lastTurretError = 0.0;
-    private double lastRobotYaw = 0.0;
-    private boolean positionTrackingEnabled = false; // Renamed from aprilTagTrackingEnabled
+    private boolean positionTrackingEnabled = false;
     private boolean wasManualControl = false;
     private boolean autoShootEnabled = false;
     private boolean cameraConfigured = false;
 
     // --- Turret Control System ---
-
     private TurretControl turretControl;
-    private GoalCalculator goalCalculator;
 
     // --- Input State ---
     private boolean g1LbPrev = false;
-    private boolean yawResetPrev = false;
+    private boolean dpadDownPrev = false;
+    private boolean isWaitingForRecalibration = false;
     private boolean g2APrev = false;
-    private boolean g2DpadRightPrev = false;
+    private boolean g2DpadUpPrev = false;
     private boolean dpadUpPrev = false; // Added for G1 Camera Toggle
     private double lastLoopTime = 0;
 
@@ -149,7 +129,6 @@ public class BjornTeleRed extends BjornTeleBase {
         imu.initialize(params);
 
         // --- Pedro Follower (Inline Init) ---
-        // --- Pedro Follower (Inline Init) ---
         follower = Constants.createFollower(hardwareMap);
         // Start at Auto end pose for seamless transition (Hardcoded handoff)
         Pose startPose = BjornConstants.Auto.RED_AUTO_END_POSE;
@@ -172,13 +151,7 @@ public class BjornTeleRed extends BjornTeleBase {
         turretControl = new TurretControl(turret, imu);
         turretControl.resetAngle(90.0); // Force start at 90° (from Auto Homing)
 
-        // --- Initialize Goal Calculator ---
-        // Use hardcoded Auto End Pose as start for triangulation
-        Pose autoStartPose = BjornConstants.Auto.RED_AUTO_END_POSE;
-
-        goalCalculator = new GoalCalculator(
-                BjornConstants.FieldPositions.RED_SCORING_X,
-                BjornConstants.FieldPositions.RED_SCORING_Y);
+        // GoalCalculator removed — turret now uses camera tracking
 
         // Pass Camera to Shooter for CV calculation
         shooter.setCamera(aprilTagCamera, GOAL_TAG_ID);
@@ -186,6 +159,16 @@ public class BjornTeleRed extends BjornTeleBase {
         telemetry.addLine("Bjorn TeleOp RED Initialized");
         telemetry.addData("Goal Tag", GOAL_TAG_ID);
         telemetry.update();
+    }
+
+    @Override
+    public void start() {
+        if (follower != null) follower.startTeleopDrive();
+    }
+
+    private Pose getCurrentPose() {
+        Pose p = follower.getPose();
+        return p != null ? p : savedPose;
     }
 
     @Override
@@ -201,11 +184,10 @@ public class BjornTeleRed extends BjornTeleBase {
         follower.update();
 
         // Feed current robot pose to turret control for position tracking
-        turretControl.updateRobotPose(follower.getPose());
+        turretControl.updateRobotPose(getCurrentPose());
 
         // --- Input Handling ---
-        handleWaypointInput();
-        handleImuReset();
+        handleRecalibration();
 
         // --- Turret Control (Inline - Latency Sensitive) ---
         updateTurret(dt);
@@ -221,58 +203,33 @@ public class BjornTeleRed extends BjornTeleBase {
         updateSubsystems(nowMs);
 
         // --- Telemetry ---
-        // --- Telemetry ---
         telemetry.addData("Alliance", "RED");
 
-        telemetry.addLine("--- TRACKING DEBUG (PEDRO) ---");
-        telemetry.addData("Tracking Active", turretControl.isPositionTrackingEnabled() ? "YES" : "NO");
+        telemetry.addLine("--- TURRET ---");
+        telemetry.addData("Mode", positionTrackingEnabled ? "CAMERA TRACK" : "MANUAL");
+        telemetry.addData("Turret Angle", "%.1f°", turretControl.getCurrentAngle());
+        telemetry.addData("Turret Target", "%.1f°", turretControl.getTargetAngle());
+        double trackError = turretControl.getTargetAngle() - turretControl.getCurrentAngle();
+        telemetry.addData("Tracking Error", "%.1f°", trackError);
 
-        // 1. Robot Pose from Pedro
-        double robotHeadingDeg = Math.toDegrees(follower.getPose().getHeading());
-        telemetry.addData("Robot Heading (Pedro)", "%.1f°", robotHeadingDeg);
-        telemetry.addData("Robot Pos", "X:%.1f Y:%.1f", follower.getPose().getX(), follower.getPose().getY());
-
-        // 2. Turret State (Robot Relative)
-        double turretRelDeg = turretControl.getCurrentAngle();
-        double targetRelDeg = turretControl.getTargetAngle();
-        telemetry.addData("Turret Heading (Robot Rel)", "%.1f°", turretRelDeg);
-        telemetry.addData("Turret Target (Robot Rel)", "%.1f°", targetRelDeg);
-
-        // 3. Field Calculations
-        // Estimated Field Heading = Robot Heading + Turret Angle
-        double estFieldHeading = robotHeadingDeg + turretRelDeg;
-
-        // Actual Goal Heading (Geometry) - Verify GoalCalculator logic independently
-        double goalX = BjornConstants.FieldPositions.RED_SCORING_X;
-        double goalY = BjornConstants.FieldPositions.RED_SCORING_Y;
-
-        double gDx = goalX - follower.getPose().getX();
-        double gDy = goalY - follower.getPose().getY();
-        double goalFieldHeading = Math.toDegrees(Math.atan2(gDy, gDx));
-        // Normalize
-        while (goalFieldHeading > 180)
-            goalFieldHeading -= 360;
-        while (goalFieldHeading <= -180)
-            goalFieldHeading += 360;
-
-        telemetry.addData("Goal Heading (Field)", "%.1f°", goalFieldHeading);
-        telemetry.addData("Est. Field Heading", "%.1f°", estFieldHeading);
-
-        // 4. Tracking Error (Target - Current) [Robot Frame]
-        double error = targetRelDeg - turretRelDeg;
-        while (error > 180)
-            error -= 360;
-        while (error <= -180)
-            error += 360;
-
-        telemetry.addData("Tracking Error", "%.1f°", error);
+        telemetry.addLine("--- CAMERA ---");
+        TagObservation latestGoal = aprilTagCamera.getLatestGoalObservation();
+        telemetry.addData("Camera", aprilTagCamera.isStreaming() ? "STREAMING" : "OFF");
+        telemetry.addData("Exposure Locked", cameraConfigured ? "YES" : "NO");
+        if (latestGoal != null) {
+            double tagDist = Math.hypot(latestGoal.x, latestGoal.y);
+            double tagBearing = Math.toDegrees(Math.atan2(latestGoal.x, latestGoal.y));
+            telemetry.addData("Tag ID", latestGoal.id);
+            telemetry.addData("Tag Range", "%.2f m", tagDist);
+            telemetry.addData("Tag Bearing", "%.1f°", tagBearing);
+        } else {
+            telemetry.addData("Tag", "NOT VISIBLE");
+        }
+        telemetry.addData("Detections", aprilTagCamera.getLastDetectionCount());
 
         telemetry.addLine("--- SYSTEMS ---");
+        telemetry.addData("Vision Calibrate", isWaitingForRecalibration ? "WAITING FOR TAG..." : "IDLE");
         telemetry.addData("Auto-Shoot", autoShootEnabled ? "ON" : "OFF");
-        telemetry.addData("Auto-Drive", autoDriveActive ? "ACTIVE" : "OFF");
-        if (turretControl.isPositionTrackingEnabled()) {
-            telemetry.addData("Distance to Target", "%.1f in", turretControl.getDistanceToTarget());
-        }
         addSubsystemTelemetry(nowMs);
         telemetry.update();
     }
@@ -284,16 +241,10 @@ public class BjornTeleRed extends BjornTeleBase {
 
         turretAngleDeg = turretControl.getCurrentAngle();
 
-        // --- G2: A toggles Position Tracking ---
+        // --- G2: A toggles Position Tracking (now Camera Tracking) ---
         if (gamepad2.a && !g2APrev) {
             positionTrackingEnabled = !positionTrackingEnabled;
             turretControl.setPositionTrackingEnabled(positionTrackingEnabled);
-            if (positionTrackingEnabled) {
-                // Set target to RED scoring position from constants
-                turretControl.setTargetPosition(
-                        BjornConstants.FieldPositions.RED_SCORING_X,
-                        BjornConstants.FieldPositions.RED_SCORING_Y);
-            }
         }
         g2APrev = gamepad2.a;
         dpadUpPrev = gamepad1.dpad_up;
@@ -327,13 +278,51 @@ public class BjornTeleRed extends BjornTeleBase {
                 wasManualControl = false;
             }
         } else {
-            // --- Position Tracking: GoalCalculator is the SOLE source of targeting ---
-            double goalAngle = goalCalculator.getTurretAngleToGoal(follower.getPose());
-            turretControl.setTargetAngle(goalAngle);
+            // --- Camera Tracking: Use AprilTag bearing to aim turret ---
+            // Poll camera and look for goal tag
+            List<TagObservation> detections = aprilTagCamera.pollDetections();
+            TagObservation goalTag = null;
+            for (TagObservation obs : detections) {
+                if (obs.id == GOAL_TAG_ID) {
+                    goalTag = obs;
+                    break;
+                }
+            }
+
+            if (goalTag != null) {
+                // Tag visible — calculate bearing error
+                double distMeters = Math.hypot(goalTag.x, goalTag.y);
+
+                if (distMeters < 6.0 && distMeters > 0.1) {
+                    // Current bearing from camera to tag (atan2(horizontal, depth))
+                    double currentBearing = Math.toDegrees(Math.atan2(goalTag.x, goalTag.y));
+
+                    // Desired bearing accounts for camera lateral offset
+                    double offsetMeters = CameraConfig.CAMERA_LATERAL_OFFSET_INCHES * 0.0254;
+                    double desiredBearing = Math.toDegrees(Math.atan2(offsetMeters, goalTag.y));
+
+                    // Error = how far off the tag is from where we want it
+                    double bearingError = (currentBearing - desiredBearing)
+                            * TurretConfigurables.cameraCorrectionGain
+                            * CameraConfig.CAMERA_TO_TURRET_SCALAR;
+
+                    // Adjust turret target directly: current angle + error
+                    double newTarget = turretAngleDeg + bearingError;
+                    newTarget = Range.clip(newTarget, LIMIT_MIN, LIMIT_MAX);
+                    turretControl.setTargetAngle(newTarget);
+                    targetFieldHeading = newTarget; // Sync for telemetry
+                }
+                // If distance out of range, hold last target (do nothing)
+            }
+            // If tag not visible, hold last target angle (no triangulation fallback)
+
             wasManualControl = false; // Reset so manual doesn't snap on toggle-off
         }
 
-        aprilTagCamera.pollDetections(); // Keep camera active for shooter
+        // Keep camera polling active even when not tracking (for shooter/auto-shoot)
+        if (!positionTrackingEnabled) {
+            aprilTagCamera.pollDetections();
+        }
 
         // --- Run TurretControl ---
         // TurretControl.update() handles PD, FF, force field, limits,
@@ -344,31 +333,55 @@ public class BjornTeleRed extends BjornTeleBase {
 
     // --- Inline Input Handlers ---
 
-    private void handleWaypointInput() {
-        boolean markWaypoint = gamepad1.left_bumper;
-        if (markWaypoint && !g1LbPrev) {
-            autoDriveTargetPose = follower.getPose();
+    private void handleRecalibration() {
+        boolean dpadDown = gamepad2.dpad_down;
+        if (dpadDown && !dpadDownPrev) {
+            isWaitingForRecalibration = !isWaitingForRecalibration;
         }
-        g1LbPrev = markWaypoint;
-    }
+        dpadDownPrev = dpadDown;
 
-    private void handleImuReset() {
-        boolean yawReset = gamepad1.dpad_down;
-        if (yawReset && !yawResetPrev) {
-            imu.resetYaw();
-            follower.setStartingPose(new Pose(
-                    follower.getPose().getX(),
-                    follower.getPose().getY(),
-                    0));
-            // Reset turret target to match (Target = Local - Yaw)
-            targetFieldHeading = turretAngleDeg - 0.0;
+        if (isWaitingForRecalibration) {
+            TagObservation goal = aprilTagCamera.getLatestGoalObservation();
+            long now = System.currentTimeMillis();
+            boolean seesTag = (goal != null && (now - goal.timestampMs) < 250);
+
+            if (seesTag) {
+                // Determine Field Position from AprilTag
+                double robotHeading = getCurrentPose().getHeading(); // Radians from Odometry
+                double turretAngleField = robotHeading + Math.toRadians(turretAngleDeg);
+                
+                // Tag Coords Relative to Turret Center (X = Forward, Y = Left) in inches
+                double x_turret = goal.y * 39.37;
+                double y_turret = -goal.x * 39.37 + CameraConfig.CAMERA_LATERAL_OFFSET_INCHES;
+                
+                // Vector from Turret Center to Tag (Field Coords)
+                double dx_field = x_turret * Math.cos(turretAngleField) - y_turret * Math.sin(turretAngleField);
+                double dy_field = x_turret * Math.sin(turretAngleField) + y_turret * Math.cos(turretAngleField);
+                
+                // Turret Center Absolute Field Coords
+                double tx = BjornConstants.FieldPositions.RED_CALIBRATION_TAG_X - dx_field;
+                double ty = BjornConstants.FieldPositions.RED_CALIBRATION_TAG_Y - dy_field;
+                
+                // Robot Center Absolute Field Coords
+                double dx_rob = BjornConstants.Motors.TURRET_OFFSET_X * Math.cos(robotHeading) - BjornConstants.Motors.TURRET_OFFSET_Y * Math.sin(robotHeading);
+                double dy_rob = BjornConstants.Motors.TURRET_OFFSET_X * Math.sin(robotHeading) + BjornConstants.Motors.TURRET_OFFSET_Y * Math.cos(robotHeading);
+                
+                double rx = tx - dx_rob;
+                double ry = ty - dy_rob;
+                
+                // Maintain heading but snap position to camera reading
+                follower.setStartingPose(new Pose(rx, ry, robotHeading));
+                
+                // Done calibrating!
+                isWaitingForRecalibration = false;
+            }
         }
-        yawResetPrev = yawReset;
     }
 
     // --- Inline Drive ---
 
     private void updateDrive() {
+        /*
         if (gamepad1.right_bumper) {
             if (!autoDriveActive) {
                 // Restore logic: Use savedPose to restart Pedro pathing
@@ -387,57 +400,52 @@ public class BjornTeleRed extends BjornTeleBase {
         } else {
             if (autoDriveActive) {
                 // Save state before killing
-                savedPose = follower.getPose();
+                savedPose = getCurrentPose();
 
                 // "Kill" (Stop following)
                 follower.breakFollowing();
-                // Stop calling update() in loop logic by setting flag false.
+                follower.startTeleopDrive();
 
                 autoDriveActive = false;
             }
         }
+        */
 
         double y = -gamepad1.left_stick_y;
-        double x = gamepad1.left_stick_x * 1.1;
-        double rx = gamepad1.right_stick_x;
+        double x = -gamepad1.left_stick_x;
+        double rx = -gamepad1.right_stick_x;
 
-        double heading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
-        double rotX = x * Math.cos(-heading) - y * Math.sin(-heading);
-        double rotY = x * Math.sin(-heading) + y * Math.cos(-heading);
-
-        double denom = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1.0);
-
-        frontLeft.setPower((rotY + rotX + rx) / denom);
-        backLeft.setPower((rotY - rotX + rx) / denom);
-        frontRight.setPower((rotY - rotX - rx) / denom);
-        backRight.setPower((rotY + rotX - rx) / denom);
+        // Pedro handles field-centric math natively when boolean flag is false
+        follower.setTeleOpDrive(y, x, rx, false);
     }
 
     // getDynamicRpm removed - logic moved to TeleOpShooter
     private void updateAutoShoot() {
         // 1. Toggle Switch (G2 Right D-Pad)
-        if (gamepad2.dpad_right && !g2DpadRightPrev) {
+        if (gamepad2.dpad_up && !g2DpadUpPrev) {
             autoShootEnabled = !autoShootEnabled;
         }
-        g2DpadRightPrev = gamepad2.dpad_right;
+        g2DpadUpPrev = gamepad2.dpad_up;
 
-        // 2. Camera Config Retry (ensure Zoom/Focus are set once streaming)
+        // 2. Camera Config Retry (lock exposure/gain once streaming)
         if (!cameraConfigured && aprilTagCamera.isStreaming()) {
             aprilTagCamera.configureCameraControls();
+            aprilTagCamera.setManualExposure(CameraConfig.TUNED_EXPOSURE, CameraConfig.TUNED_GAIN);
             cameraConfigured = true;
         }
 
         // 3. Auto Shoot Trigger
-        // Trigger if: Enabled AND Goal Visible AND Shooter Idle/Off
-        if (autoShootEnabled && !shooter.isActive() && !shooter.isScanning()) {
+        if (autoShootEnabled && !shooter.isActive()) {
             TagObservation goal = aprilTagCamera.getLatestGoalObservation();
+            boolean seesTag = false;
             if (goal != null) {
                 // Check freshness (ensure we aren't using stale data)
                 long now = System.currentTimeMillis();
                 if ((now - goal.timestampMs) < 200) { // Detection from last ~200ms
-                    shooter.startScan();
+                    seesTag = true;
                 }
             }
+            shooter.setIdle(seesTag);
         }
     }
 }

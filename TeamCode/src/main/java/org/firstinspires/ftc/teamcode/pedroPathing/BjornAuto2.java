@@ -13,6 +13,8 @@ import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import org.firstinspires.ftc.teamcode.common.BjornHardware;
 import org.firstinspires.ftc.teamcode.common.shooter.AutoShooter;
+import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 
 /**
  * BjornAuto2 - New Autonomous Pathing
@@ -181,8 +183,8 @@ public class BjornAuto2 extends OpMode {
         // Fixed distance calc or reuse same logic?
         // Using same logic as RawPedro
         double distFeet = 37.0 / 12.0;
-        int targetWithOffset = (int) (org.firstinspires.ftc.teamcode.common.BjornConstants.Power.SHOOTER_RPM_SLOPE_CV * distFeet 
-                                    + org.firstinspires.ftc.teamcode.common.BjornConstants.Power.SHOOTER_RPM_OFFSET_CV);
+        int targetWithOffset = (int) (ShooterConfigurables.rpmSlopeRanger * distFeet 
+                                    + ShooterConfigurables.rpmOffsetRanger);
         shooter.setTargetRpm(targetWithOffset + 200);
     }
 

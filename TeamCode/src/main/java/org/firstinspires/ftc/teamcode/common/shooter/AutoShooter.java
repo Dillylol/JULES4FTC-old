@@ -6,14 +6,14 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
 import org.firstinspires.ftc.teamcode.common.BjornHardware;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 
 public class AutoShooter {
     private final BjornHardware hardware;
     private int targetRpm = 0;
     private double filteredRpm = 0.0;
-    private static final double EMA_ALPHA = 0.2;
+    private boolean isShooting = false;
     private static final double TICKS_PER_REV = 28.0;
-    private static final double READY_TOL_RPM = 100.0;
 
     public AutoShooter(BjornHardware hardware) {
         this.hardware = hardware;
@@ -22,11 +22,19 @@ public class AutoShooter {
     public void setTargetRpm(int rpm) {
         // Clamp to safe range if non-zero
         if (rpm > 0) {
-            this.targetRpm = Math.max((int) BjornConstants.Power.SHOOTER_MIN_RPM,
-                    Math.min(rpm, (int) BjornConstants.Power.SHOOTER_MAX_RPM));
+            this.targetRpm = Math.max((int) ShooterConfigurables.minRpm,
+                    Math.min(rpm, (int) ShooterConfigurables.maxRpm));
         } else {
             this.targetRpm = 0;
         }
+    }
+
+    public void setTargetDistance(double distanceInches) {
+        double rangeFt = distanceInches / 12.0;
+        double slope = ShooterConfigurables.rpmSlopeRanger;
+        double offset = ShooterConfigurables.rpmOffsetRanger;
+        double calculatedRpm = (slope * rangeFt) + offset;
+        setTargetRpm((int) calculatedRpm);
     }
 
     public void setIntakePower(boolean on) {
@@ -35,28 +43,32 @@ public class AutoShooter {
         }
     }
 
+    public void setShooting(boolean shooting) {
+        this.isShooting = shooting;
+    }
+
     public boolean isReady() {
         if (targetRpm == 0)
             return false;
-        return Math.abs(filteredRpm - targetRpm) < READY_TOL_RPM;
+        return Math.abs(filteredRpm - targetRpm) < ShooterConfigurables.readyTolRpm;
     }
 
     public void update() {
         // 1. Calculate RPM
         double measured = readRpm();
-        filteredRpm = (EMA_ALPHA * measured) + ((1.0 - EMA_ALPHA) * filteredRpm);
+        filteredRpm = (ShooterConfigurables.rpmEmaAlpha * measured) + ((1.0 - ShooterConfigurables.rpmEmaAlpha) * filteredRpm);
 
         // 2. Battery Compensation
         int commandRpm = targetRpm;
         if (targetRpm > 0 && hardware.batterySensor != null) {
             double voltage = hardware.getBatteryVoltage();
-            double nominal = BjornConstants.Power.NOMINAL_BATT_V;
+            double nominal = ShooterConfigurables.nominalBattV;
             // Simple Feedforward compensation: if voltage drops, increase RPM target
             // slightly to maintain speed
             // This is a basic P-like adjustment based on voltage sag
             double sag = Math.max(0, nominal - voltage);
-            // K_V is defined in constants, usually 0 but allows tuning
-            commandRpm += (int) (sag * BjornConstants.Power.SHOOTER_K_V_RPM);
+            // K_V is defined in configurables, usually 0 but allows tuning
+            commandRpm += (int) (sag * ShooterConfigurables.shooterKVRpm);
         }
 
         // 3. Set Motor Powers/Velocity
@@ -66,7 +78,7 @@ public class AutoShooter {
         boolean ready = isReady();
         updateLeds(ready);
 
-        if (ready) {
+        if (isShooting) {
             // Auto Grip Feed
             if (hardware.grip1 != null)
                 hardware.grip1.setPower(1.0);

@@ -69,6 +69,17 @@ public class TurretConfigurables {
     
     @Sorter(sort = 50)
     public static double aprilTagCorrectionGain = 0.5;
+
+    // === Camera Tracking PID (separate from base turret PD) ===
+    
+    @Sorter(sort = 60)
+    public static double cameraKp = 0.012;
+
+    @Sorter(sort = 61)
+    public static double cameraKd = 0.003;
+
+    @Sorter(sort = 62)
+    public static double cameraCorrectionGain = 1.0; // Scale factor for camera bearing error
     
     // Calculated property (DO NOT TUNE DIRECTLY)
     public static double getTicksPerDegree() {

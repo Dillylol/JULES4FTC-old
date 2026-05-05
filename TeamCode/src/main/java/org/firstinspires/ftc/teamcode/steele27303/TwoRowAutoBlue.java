@@ -13,11 +13,14 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.IMU;
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
+import org.firstinspires.ftc.teamcode.common.BjornHardware;
+import org.firstinspires.ftc.teamcode.common.shooter.AutoShooter;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
 import org.firstinspires.ftc.teamcode.common.turret.GoalCalculator;
 
-@Autonomous(name = "Bjorn Auto Red", group = "Red")
-public class BjornAutoRed extends OpMode {
+@Autonomous(name = "2rowAutoBlue")
+public class TwoRowAutoBlue extends OpMode {
 
     private Follower follower;
     private Paths paths;
@@ -28,6 +31,10 @@ public class BjornAutoRed extends OpMode {
     private IMU imu;
     private DcMotorEx turretMotor;
 
+    private BjornHardware hardwareWrapper;
+    private AutoShooter shooter;
+    private long actionTimer = 0;
+
     private double lastLoopTime = 0.0;
     private double dt = 0.02;
 
@@ -35,8 +42,8 @@ public class BjornAutoRed extends OpMode {
     public void init() {
         // --- Initialize Pedro Follower ---
         follower = Constants.createFollower(hardwareMap);
-        // Start pose based on the first path start: (110.500, 135.500) heading 0
-        follower.setStartingPose(new Pose(110.500, 135.500, Math.toRadians(0)));
+        // Start pose based on the first path start: (33.500, 135.500) heading 180
+        follower.setStartingPose(new Pose(33.500, 135.500, Math.toRadians(180)));
         paths = new Paths(follower);
 
         // --- Initialize IMU ---
@@ -56,10 +63,18 @@ public class BjornAutoRed extends OpMode {
         // --- Initialize Turret Control System ---
         turretControl = new TurretControl(turretMotor, imu);
 
-        // Target tracking score zone: x = 132, y = 138 (User requested red score zone)
-        goalCalculator = new GoalCalculator(132.0, 138.0);
+        // Target tracking score zone: x = 0, y = 144 (User requested blue score zone)
+        goalCalculator = new GoalCalculator(0.0, 144.0);
+        
+        // --- Initialize Hardware & Shooter ---
+        hardwareWrapper = BjornHardware.forTeleOp(hardwareMap);
+        shooter = new AutoShooter(hardwareWrapper);
+        shooter.setTargetRpm(1000); // Trigger RPM idle mode on start
+        
+        // Fast 2-second ramp for Auto
+        ShooterConfigurables.rampDurationMs = 2000;
 
-        telemetry.addLine("Bjorn Auto Red Initialized");
+        telemetry.addLine("Bjorn Auto Blue Initialized");
         telemetry.update();
     }
 
@@ -87,6 +102,9 @@ public class BjornAutoRed extends OpMode {
 
         // Update Turret Control Loop
         turretControl.update(dt);
+        
+        // Update Shooter
+        shooter.update();
 
         // --- Telemetry ---
         telemetry.addData("Path State", pathState);
@@ -98,77 +116,121 @@ public class BjornAutoRed extends OpMode {
     }
 
     public void autonomousPathUpdate() {
-        // By default during the program, track the goal
-        if (pathState < 9) {
-            double goalAngle = goalCalculator.getTurretAngleToGoal(follower.getPose());
-            turretControl.setTargetAngle(goalAngle);
+        // By default during the program, hold a static 143-degree field-relative angle rather than tracking the goal dynamically
+        if (pathState < 11) {
+            turretControl.setTargetMode(TurretControl.TargetMode.WORLD);
+            turretControl.setTargetAngle(143.0);
         } else {
-            // When parking (state 9 or 10), set turret heading to 90 degrees.
+            // When parking (after row2shootrow3approach), set turret heading to 90 degrees local.
+            turretControl.setTargetMode(TurretControl.TargetMode.LOCAL);
             turretControl.setTargetAngle(90.0);
         }
 
+        long nowMs = System.currentTimeMillis();
+
         switch (pathState) {
             case 0:
+                // Pre-fire spin up 1 second early (approx 25 inches away from target)
+                if (Math.hypot(follower.getPose().getX() - 57.0, follower.getPose().getY() - 99.0) < 25.0) {
+                    shooter.setTargetDistance(47.0);
+                    shooter.setIntakePower(true);
+                }
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.preloadshootrow1approach, true);
+                    // Arrived at startpreloadshoot. Start shooting!
+                    shooter.setTargetDistance(47.0);
+                    shooter.setIntakePower(true);
+                    shooter.setShooting(true);
+                    actionTimer = nowMs;
                     pathState = 1;
                 }
                 break;
             case 1:
-                if (!follower.isBusy()) {
-                    follower.followPath(paths.row1approw1capture, true);
+                if (nowMs - actionTimer > 5000) {
+                    // 4 second window out. Return to idle, stop intake, and go to next point
+                    shooter.setTargetRpm(1000);
+                    shooter.setIntakePower(false);
+                    shooter.setShooting(false);
+                    follower.followPath(paths.preloadshootrow1approach, true);
                     pathState = 2;
                 }
                 break;
             case 2:
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.row1captureshootrow1, true);
+                    follower.followPath(paths.row1approw1capture, true);
+                    shooter.setIntakePower(true); // Turn on intake for capture
                     pathState = 3;
                 }
                 break;
             case 3:
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.shootrow1row2approach, true);
+                    // Do not turn off intake immediately, extend intake while reversing
+                    follower.followPath(paths.row1captureshootrow1, true);
                     pathState = 4;
                 }
                 break;
             case 4:
+                // Extended intake timing (keep intaking for first 10 inches of reverse to ensure full capture)
+                if (Math.hypot(follower.getPose().getX() - 14.0, follower.getPose().getY() - 86.0) < 10.0) {
+                    shooter.setIntakePower(true);
+                }
+                // Pre-fire spin up 1 second early
+                else if (Math.hypot(follower.getPose().getX() - 57.0, follower.getPose().getY() - 99.0) < 25.0) {
+                    shooter.setTargetDistance(47.0);
+                    shooter.setIntakePower(true);
+                }
+                else {
+                    shooter.setIntakePower(false);
+                }
+                
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.row2approw2capture, true);
+                    // Arrived at row1captureshootrow1. Shoot loop again!
+                    shooter.setTargetDistance(47.0);
+                    shooter.setIntakePower(true);
+                    shooter.setShooting(true);
+                    actionTimer = nowMs;
                     pathState = 5;
                 }
                 break;
             case 5:
-                if (!follower.isBusy()) {
-                    follower.followPath(paths.row2capturerow2shoot, true);
+                if (nowMs - actionTimer > 5000) {
+                    shooter.setTargetRpm(1000);
+                    shooter.setIntakePower(false);
+                    shooter.setShooting(false);
+                    follower.followPath(paths.shootrow1row2approach, true);
                     pathState = 6;
                 }
                 break;
             case 6:
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.row2shootrow3approach, true);
+                    follower.followPath(paths.row2approw2capture, true);
+                    shooter.setIntakePower(true); // Turn on intake for capture
                     pathState = 7;
                 }
                 break;
             case 7:
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.row3approw3capture, true);
+                    follower.followPath(paths.row3capturepark, true);
                     pathState = 8;
                 }
                 break;
             case 8:
+                // Extended intake timing for the final capture before parking
+                if (Math.hypot(follower.getPose().getX() - 12.0, follower.getPose().getY() - 62.0) < 10.0) {
+                    shooter.setIntakePower(true);
+                } else {
+                    shooter.setIntakePower(false);
+                }
+                
                 if (!follower.isBusy()) {
-                    follower.followPath(paths.row3capturepark, true);
-                    pathState = 9;
+                    telemetry.addLine("Path Chain Complete");
+                    pathState = 13; // End state
                 }
                 break;
             case 9:
-                if (!follower.isBusy()) {
-                    telemetry.addLine("Path Chain Complete");
-                    pathState = 10; // End state
-                }
-                break;
             case 10:
+            case 11:
+            case 12:
+            case 13:
                 // End state - do nothing
                 break;
         }
@@ -189,78 +251,53 @@ public class BjornAutoRed extends OpMode {
         public Paths(Follower follower) {
             startpreloadshoot = follower.pathBuilder().addPath(
                     new BezierLine(
-                            new Pose(110.500, 135.500),
-                            new Pose(93.000, 93.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(330))
-                    .setReversed(true)
+                            new Pose(33.500, 135.500),
+                            new Pose(57.000, 99.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(-170))
                     .build();
 
             preloadshootrow1approach = follower.pathBuilder().addPath(
                     new BezierCurve(
-                            new Pose(93.000, 93.000),
-                            new Pose(96.012, 84.012),
-                            new Pose(102.000, 84.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(330), Math.toRadians(0))
+                            new Pose(57.000, 99.000),
+                            new Pose(57.000, 87.000),
+                            new Pose(54.000, 86.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-170), Math.toRadians(180))
                     .build();
 
             row1approw1capture = follower.pathBuilder().addPath(
                     new BezierLine(
-                            new Pose(102.000, 84.000),
-                            new Pose(129.000, 84.000)))
+                            new Pose(54.000, 86.000),
+                            new Pose(14.000, 86.000)))
                     .setTangentHeadingInterpolation()
                     .build();
 
             row1captureshootrow1 = follower.pathBuilder().addPath(
                     new BezierLine(
-                            new Pose(129.000, 84.000),
-                            new Pose(93.000, 93.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(350))
-                    .setReversed(true)
+                            new Pose(14.000, 86.000),
+                            new Pose(57.000, 99.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(-170))
                     .build();
 
             shootrow1row2approach = follower.pathBuilder().addPath(
                     new BezierCurve(
-                            new Pose(93.000, 93.000),
-                            new Pose(92.863, 69.765),
-                            new Pose(99.000, 60.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(350), Math.toRadians(0))
+                            new Pose(57.000, 99.000),
+                            new Pose(57.000, 68.000),
+                            new Pose(56.000, 62.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(-170), Math.toRadians(180))
                     .build();
 
             row2approw2capture = follower.pathBuilder().addPath(
                     new BezierLine(
-                            new Pose(99.000, 60.000),
-                            new Pose(129.000, 60.000)))
-                    .setTangentHeadingInterpolation()
-                    .build();
-
-            row2capturerow2shoot = follower.pathBuilder().addPath(
-                    new BezierCurve(
-                            new Pose(129.000, 60.000),
-                            new Pose(102.000, 72.000),
-                            new Pose(93.000, 93.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(330))
-                    .build();
-
-            row2shootrow3approach = follower.pathBuilder().addPath(
-                    new BezierCurve(
-                            new Pose(93.000, 93.000),
-                            new Pose(96.145, 63.129),
-                            new Pose(99.000, 36.000)))
-                    .setTangentHeadingInterpolation()
-                    .build();
-
-            row3approw3capture = follower.pathBuilder().addPath(
-                    new BezierLine(
-                            new Pose(99.000, 36.000),
-                            new Pose(126.000, 36.000)))
+                            new Pose(56.000, 62.000),
+                            new Pose(12.000, 62.000)))
                     .setTangentHeadingInterpolation()
                     .build();
 
             row3capturepark = follower.pathBuilder().addPath(
                     new BezierLine(
-                            new Pose(126.000, 36.000),
-                            new Pose(102.000, 66.000)))
-                    .setLinearHeadingInterpolation(Math.toRadians(0), Math.toRadians(0))
+                            new Pose(12.000, 62.000),
+                            new Pose(45.000, 42.000)))
+                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
                     .build();
         }
     }

@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 import org.firstinspires.ftc.teamcode.common.BjornHardware;
 
 /**
@@ -69,10 +70,10 @@ public class JULES_ShooterController {
         this.vSensor = hardware.batterySensor;
     }
 
-    public void setTargetRpm(int rpm) {
-        int safeRpm = (rpm <= 0) ? 0 : Math.max((int)BjornConstants.Power.SHOOTER_MIN_RPM, Math.min(rpm, (int)BjornConstants.Power.SHOOTER_MAX_RPM));
+    public void setTargetRpm(double rpm) {
+        int safeRpm = (rpm <= 0) ? 0 : Math.max((int)ShooterConfigurables.minRpm, Math.min((int)rpm, (int)ShooterConfigurables.maxRpm));
         
-        if (this.targetRpm != safeRpm) {
+        if (safeRpm != targetRpm) {
             this.targetRpm = safeRpm;
             this.targetSetTimeMs = System.currentTimeMillis();
             
@@ -140,12 +141,13 @@ public class JULES_ShooterController {
         int desiredCompensated = targetRpm;
         if (targetRpm > 0 && batteryCompEnabled && vSensor != null) {
             double v = vSensor.getVoltage();
-            double sag = Math.max(0, BjornConstants.Power.NOMINAL_BATT_V - v);
-            desiredCompensated += (int)(sag * BjornConstants.Power.SHOOTER_K_V_RPM);
+            double sag = Math.max(0, ShooterConfigurables.nominalBattV - v);
+            // K_V logic applied
+            desiredCompensated += (int)(sag * ShooterConfigurables.shooterKVRpm);
         }
         
         // 3. Apply Ramping
-        long rampDuration = (customRampDurationMs >= 0) ? customRampDurationMs : BjornConstants.Power.SHOOTER_RAMP_DURATION_MS;
+        long rampDuration = (customRampDurationMs >= 0) ? customRampDurationMs : ShooterConfigurables.rampDurationMs;
         
         if (rampDuration <= 0) {
             commandedRpm = desiredCompensated;

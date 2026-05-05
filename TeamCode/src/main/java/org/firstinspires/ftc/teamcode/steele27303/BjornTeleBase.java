@@ -10,6 +10,7 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
 import org.firstinspires.ftc.teamcode.common.BjornHardware;
 import org.firstinspires.ftc.teamcode.common.shooter.TeleOpShooter;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 
 /**
  * Base TeleOp - Subsystems Only (Reduced Latency Architecture)
@@ -59,6 +60,9 @@ public abstract class BjornTeleBase extends OpMode {
      * Subclasses MUST call this in their init() method.
      */
     protected void initSubsystems() {
+        // Enforce 3-second explicit TeleOp ramp (configurable)
+        ShooterConfigurables.rampDurationMs = 3000;
+
         // 1. Initialize Hardware Wrapper
         hardware = BjornHardware.forTeleOp(hardwareMap);
 
@@ -115,14 +119,14 @@ public abstract class BjornTeleBase extends OpMode {
         y2Prev = y2;
     }
 
-    private boolean g2DpadLeftPrev = false;
+    private boolean g2DpadUpPrev = false;
 
     private void handleShooterCvInput() {
-        boolean dpadLeft = gamepad2.dpad_left;
-        if (dpadLeft && !g2DpadLeftPrev) {
+        boolean dpadUp = gamepad2.dpad_up;
+        if (dpadUp && !g2DpadUpPrev) {
             shooter.toggleCv();
         }
-        g2DpadLeftPrev = dpadLeft;
+        g2DpadUpPrev = dpadUp;
     }
 
     private void handleIntake() {

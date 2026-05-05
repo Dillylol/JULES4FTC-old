@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.hardware.VoltageSensor;
 
 import org.firstinspires.ftc.teamcode.common.BjornConstants;
 import org.firstinspires.ftc.teamcode.common.BjornHardware;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 
 /**
  * Owns the flywheel control loop and single-shot sequencing.
@@ -35,7 +36,6 @@ public final class ShooterController {
     private static final double RPM_MIN = 1200.0;
     private static final double RPM_MAX = 3000.0;
     private static final double EMA_ALPHA = 0.2;
-    private static final long RAMP_DURATION_MS = 3000L; // 3 seconds (tunable)
     private static final double POWER_CAP_FRACTION = 0.8; // 80% of RPM_MAX
 
     private final DcMotorEx flywheel;
@@ -259,12 +259,12 @@ public final class ShooterController {
 
     private double getBatteryVoltage() {
         if (vSensor == null) {
-            return BjornConstants.Power.NOMINAL_BATT_V;
+            return ShooterConfigurables.nominalBattV;
         }
         try {
             return vSensor.getVoltage();
         } catch (Exception ignored) {
-            return BjornConstants.Power.NOMINAL_BATT_V;
+            return ShooterConfigurables.nominalBattV;
         }
     }
 
@@ -274,8 +274,8 @@ public final class ShooterController {
         }
 
         double vNow = getBatteryVoltage();
-        double dV = BjornConstants.Power.NOMINAL_BATT_V - vNow;
-        double compensated = baseRpm + (BjornConstants.Power.SHOOTER_K_V_RPM * dV);
+        double dV = ShooterConfigurables.nominalBattV - vNow;
+        double compensated = baseRpm + (ShooterConfigurables.shooterKVRpm * dV);
         if (compensated <= 0.0) {
             return 0;
         }
@@ -308,12 +308,13 @@ public final class ShooterController {
         }
 
         long dt = Math.max(0L, nowMs - targetSetMs);
-        if (dt >= RAMP_DURATION_MS) {
+        long rampDuration = ShooterConfigurables.rampDurationMs;
+        if (dt >= rampDuration) {
             commandedRpm = desired;
             rampActive = false;
         } else {
             // S-Curve Ramping
-            double x = Math.max(0.0, Math.min(1.0, (double) dt / RAMP_DURATION_MS));
+            double x = Math.max(0.0, Math.min(1.0, (double) dt / rampDuration));
             double s = x * x * (3.0 - 2.0 * x); // Smoothstep
             double blended = rampStartRpm + (desired - rampStartRpm) * s;
             commandedRpm = (int) Math.round(blended);

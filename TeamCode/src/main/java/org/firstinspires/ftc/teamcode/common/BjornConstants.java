@@ -59,7 +59,7 @@ public final class BjornConstants {
 
                 // Turret physical offset from robot center of rotation (inches)
                 // MEASURE THESE ON YOUR ROBOT - even 2-3 inches causes ~3° error at 70 inches
-                public static final double TURRET_OFFSET_X = 0.0; // Forward offset (positive = toward front)
+                public static final double TURRET_OFFSET_X = -4.5; // Forward offset (positive = toward front)
                 public static final double TURRET_OFFSET_Y = 0.0; // Lateral offset (positive = toward left)
                 public static final DcMotorSimple.Direction GRIP1_DIRECTION = DcMotorSimple.Direction.REVERSE;
                 public static final DcMotorSimple.Direction GRIP2_DIRECTION = DcMotorSimple.Direction.FORWARD;
@@ -90,29 +90,6 @@ public final class BjornConstants {
                 // Nominal battery voltage (12V system baseline)
                 public static final double NOMINAL_BATT_V = 12.0;
 
-                // RPM added per volt of sag for the shooter (trained by K-tuner)
-                public static final double SHOOTER_K_V_RPM = 0.0; // keep 0.0 as default
-
-                // Max RPM change per update step for ramping, to reduce current spikes
-                public static final int SHOOTER_MAX_RPM_STEP_PER_UPDATE = 250; // tune as needed
-
-                public static volatile long SHOOTER_RAMP_DURATION_MS = 3000L;
-
-                // S-Curve Ramp Tuning (Live Tunable)
-                public static double RAMP_COEF = 0.00025;
-                public static double RAMP_MIN_RATE = 400.0;
-
-                // Dynamic RPM Calculation Constants
-
-                public static final double SHOOTER_RPM_SLOPE_CV = 116.4042383594456;
-                public static final double SHOOTER_RPM_OFFSET_CV = 2084.2966941424975;
-
-                // Swyft Ranger RPM Constants (Baseline = CV constants)
-                public static final double SHOOTER_RPM_SLOPE_RANGER = 116.4042383594456;
-                public static final double SHOOTER_RPM_OFFSET_RANGER = 2084.2966941424975;
-
-                public static final double SHOOTER_MIN_RPM = 1000.0; // Lower bound for valid shots
-                public static final double SHOOTER_MAX_RPM = 6000.0; // Safety cap
         }
 
         public static final class Auto {
@@ -121,11 +98,11 @@ public final class BjornConstants {
 
                 // End Poses for Auto-Drive (PedroPathing)
                 public static final com.pedropathing.geometry.Pose RED_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
-                                102.0,
-                                66.0, Math.toRadians(0)); // Matches BjornAutoRed park pose
+                                99.0,
+                                42.0, Math.toRadians(0)); // Matches 9ballAutoRed and 2rowAutoRed park pose
                 public static final com.pedropathing.geometry.Pose BLUE_AUTO_END_POSE = new com.pedropathing.geometry.Pose(
-                                42.0,
-                                66.0, Math.toRadians(180)); // Matches BjornAutoBlue park pose
+                                45.0,
+                                42.0, Math.toRadians(180)); // Matches 9ballAutoBlue and 2rowAutoBlue park pose
 
                 public static final com.pedropathing.geometry.Pose BLUE_AUTO_START_POSE = new com.pedropathing.geometry.Pose(
                                 0,
@@ -190,11 +167,17 @@ public final class BjornConstants {
 
                 // Scoring Zone Target Coordinates (Inches)
                 // These are the fixed field positions where the turret should aim
-                public static final double BLUE_SCORING_X = 15.0;
-                public static final double BLUE_SCORING_Y = 135.0;
+                public static final double BLUE_SCORING_X = 0.0;
+                public static final double BLUE_SCORING_Y = 144.0;
 
-                public static final double RED_SCORING_X = 129.0; // Mirrored from blue (144 - 15)
-                public static final double RED_SCORING_Y = 135.0;
+                public static final double BLUE_CALIBRATION_TAG_X = 18.0;
+                public static final double BLUE_CALIBRATION_TAG_Y = 129.0;
+                
+                public static final double RED_CALIBRATION_TAG_X = 126.0;
+                public static final double RED_CALIBRATION_TAG_Y = 129.0;
+
+                public static final double RED_SCORING_X = 144.0; // Mirrored from blue (144 - 0)
+                public static final double RED_SCORING_Y = 144.0;
 
                 // Legacy Goal Poses (kept for reference)
                 public static final com.pedropathing.geometry.Pose RED_GOAL = new com.pedropathing.geometry.Pose(60, 60,

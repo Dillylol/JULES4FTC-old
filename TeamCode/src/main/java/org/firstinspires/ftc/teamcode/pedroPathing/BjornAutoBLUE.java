@@ -31,7 +31,7 @@ import java.util.Arrays;
  * 4) CHANGE: Keep intake ON through GRAB and the return to ALIGN1_BACK; turn it
  * OFF only after reaching ALIGN1_BACK.
  */
-@Autonomous(name = "BjornAutoBLUE")
+@Autonomous(name = "BjornAutoBLUEOLD", group = "Red")
 public class BjornAutoBLUE extends OpMode {
 
     // ---------------- Hardware ----------------

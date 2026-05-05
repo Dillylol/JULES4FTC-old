@@ -36,6 +36,12 @@ public final class JulesStreamBus implements AutoCloseable {
             return null;
         }
 
+        /** Client: take next line (non-blocking). Returns null if empty or closed. */
+        public String poll() {
+            if (!open) return null;
+            return q.poll();
+        }
+
         @Override public void close() {
             open = false;
             bus.drop(this);

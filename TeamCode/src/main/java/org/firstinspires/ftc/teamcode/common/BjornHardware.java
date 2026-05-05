@@ -56,7 +56,7 @@ public final class BjornHardware {
     // Cartridge 2: 4:1 (Actual: 3.61:1)
     // External Assembly: 4:1 (80T/20T)
     // Total = 5.23 * 3.61 * 4 = 75.52:1
-    private static final double TURRET_GEAR_REDUCTION = 48.0;
+    private static final double TURRET_GEAR_REDUCTION = 75.52;
 
     public static final double TURRET_TICKS_PER_DEGREE = (MOTOR_TICKS_PER_REV * TURRET_GEAR_REDUCTION) / 360.0;
 

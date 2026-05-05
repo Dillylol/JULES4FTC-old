@@ -109,9 +109,11 @@ public class TurretControl {
             error = 0;
         }
 
-        // PD calculation
+        // PD calculation - use camera PID when tracking, base PID otherwise
         double derivative = (dt > 0) ? (error - lastTurretError) / dt : 0.0;
-        double pid = (error * TurretConfigurables.kP) + (derivative * TurretConfigurables.kD);
+        double activeKp = positionTrackingEnabled ? TurretConfigurables.cameraKp : TurretConfigurables.kP;
+        double activeKd = positionTrackingEnabled ? TurretConfigurables.cameraKd : TurretConfigurables.kD;
+        double pid = (error * activeKp) + (derivative * activeKd);
 
         // Use specific FF gain for tracking mode if enabled
         double ffGain = positionTrackingEnabled ? TurretConfigurables.trackerFFGain

@@ -13,9 +13,11 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.paths.PathChain;
 import com.pedropathing.geometry.Pose;
 import org.firstinspires.ftc.teamcode.common.BjornHardware;
+import org.firstinspires.ftc.teamcode.common.turret.TurretControl;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 import org.firstinspires.ftc.teamcode.common.shooter.AutoShooter;
 
-@Autonomous(name = "RawPedro Red", group = "Autonomous")
+@Autonomous(name = "Raw Pedro Red", group = "Pedro")
 @Configurable // Panels
 public class RawPedroRed extends OpMode {
     private TelemetryManager panelsTelemetry; // Panels Telemetry instance
@@ -144,8 +146,8 @@ public class RawPedroRed extends OpMode {
         shootTimer = -1;
         // Calculate RPM for 37 inches
         double distFeet = 37.0 / 12.0;
-        int targetWithOffset = (int) (org.firstinspires.ftc.teamcode.common.BjornConstants.Power.SHOOTER_RPM_SLOPE_CV * distFeet 
-                                    + org.firstinspires.ftc.teamcode.common.BjornConstants.Power.SHOOTER_RPM_OFFSET_CV);
+        int targetWithOffset = (int) (ShooterConfigurables.rpmSlopeRanger * distFeet 
+                                    + ShooterConfigurables.rpmOffsetRanger);
         
         // Add manual offset +200 RPM
         shooter.setTargetRpm(targetWithOffset + 200);

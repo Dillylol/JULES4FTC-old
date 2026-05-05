@@ -24,8 +24,8 @@ public class Constants {
                         .leftRearMotorDirection(DcMotorSimple.Direction.FORWARD)
                         .rightFrontMotorDirection(DcMotorSimple.Direction.REVERSE)
                         .rightRearMotorDirection(DcMotorSimple.Direction.FORWARD)
-                        .xVelocity(52.468358785766284)
-                        .yVelocity(38.93550753740958);
+                        .xVelocity(60.310722462487355)
+                        .yVelocity(39.7916370492672);
 
         public static ThreeWheelIMUConstants localizerConstants = new ThreeWheelIMUConstants()
                         .forwardTicksToInches(.001989436789)
@@ -46,16 +46,16 @@ public class Constants {
 
         public static FollowerConstants followerConstants = new FollowerConstants()
                         .mass(11.158) //change
-                        .forwardZeroPowerAcceleration(-50.67907676516058)
-                        .lateralZeroPowerAcceleration(-72.67565220054266)
+                        .forwardZeroPowerAcceleration(-43.0295022127659405)
+                        .lateralZeroPowerAcceleration(-91.256410323735925)
                         .useSecondaryTranslationalPIDF(false)
                         .useSecondaryHeadingPIDF(false)
                         .useSecondaryDrivePIDF(false)
-                        .translationalPIDFCoefficients(new PIDFCoefficients(0.35, 0.00001, 0.025, 0.025)) //tune
-                        .headingPIDFCoefficients(new PIDFCoefficients(1.2, 0.75, 0.05, 0.025)) //tune
-                        .drivePIDFCoefficients(new FilteredPIDFCoefficients(0.02, 0.0, 0.00015, 0.6, 0.01)) //tune
-                        .centripetalScaling(0.0001);
-        public static PathConstraints pathConstraints = new PathConstraints(0.99, 100, 1, 1);
+                        .translationalPIDFCoefficients(new PIDFCoefficients(0.0795, 0.0000, 0.0015, 0.0212)) //tune
+                        .headingPIDFCoefficients(new PIDFCoefficients(0.75, 0, 0.0015, 0.0315)) //tune
+                        .drivePIDFCoefficients(new FilteredPIDFCoefficients(0.02, 0.0, 0.0006, 0.6, 0.0212))
+                        .centripetalScaling(0.0005);
+        public static PathConstraints pathConstraints = new PathConstraints(0.99, 100, .975, 1);
 
         public static Follower createFollower(HardwareMap hardwareMap) {
                 return new FollowerBuilder(followerConstants, hardwareMap)

@@ -13,7 +13,7 @@ import com.pedropathing.paths.PathChain;
 
 import org.firstinspires.ftc.teamcode.PedroPathingSetup;
 
-@Autonomous(name = "BlueAutoTest")
+@Autonomous(name = "BlueAutoTest", group = "Red")
 @Configurable
 public class BlueAutoTest extends OpMode {
     private TelemetryManager panelsTelemetry;

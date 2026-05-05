@@ -7,6 +7,7 @@ import org.firstinspires.ftc.teamcode.common.BjornHardware;
 import org.firstinspires.ftc.teamcode.jules.cv.AprilTagCamera;
 import org.firstinspires.ftc.teamcode.jules.cv.AprilTagCamera.TagObservation;
 import java.util.List;
+import org.firstinspires.ftc.teamcode.configurables.ShooterConfigurables;
 
 public class TeleOpShooter {
     private final BjornHardware hardware;
@@ -18,16 +19,12 @@ public class TeleOpShooter {
     private boolean useCv = false;
     // Continuous Ranging State
     private double smoothedVoltage = 0.0;
-    private static final double VOLTAGE_ALPHA = 0.1; // Smoothing factor for voltage
     private boolean firstReading = true;
 
     private int targetRpm = 0;
     private double currentDistanceInches = 0.0;
     private double filteredRpm = 0.0;
-    private static final double EMA_ALPHA = 0.2;
     private static final double TICKS_PER_REV = 28.0;
-    private static final double READY_TOL_RPM = 100.0;
-    private static final int IDLE_RPM = 2000;
 
     public TeleOpShooter(BjornHardware hardware) {
         this.hardware = hardware;
@@ -56,6 +53,10 @@ public class TeleOpShooter {
         idle = !idle;
         // If we toggle idle ON while active, does nothing (active overrides).
         // If we toggle idle OFF while active, does nothing.
+    }
+
+    public void setIdle(boolean isIdle) {
+        this.idle = isIdle;
     }
 
     public void toggleCv() {
@@ -101,13 +102,13 @@ public class TeleOpShooter {
     }
 
     public boolean isReady() {
-        return active && targetRpm > 0 && Math.abs(filteredRpm - targetRpm) < READY_TOL_RPM;
+        return active && targetRpm > 0 && Math.abs(filteredRpm - targetRpm) < ShooterConfigurables.readyTolRpm;
     }
 
     public void update() {
         // 1. Update Measured RPM
         double measured = readRpm();
-        filteredRpm = (EMA_ALPHA * measured) + ((1.0 - EMA_ALPHA) * filteredRpm);
+        filteredRpm = (ShooterConfigurables.rpmEmaAlpha * measured) + ((1.0 - ShooterConfigurables.rpmEmaAlpha) * filteredRpm);
 
         if (active) {
             // Continuous Ranging & RPM Update
@@ -119,7 +120,7 @@ public class TeleOpShooter {
                     smoothedVoltage = rawVolts;
                     firstReading = false;
                 } else {
-                    smoothedVoltage = (VOLTAGE_ALPHA * rawVolts) + ((1.0 - VOLTAGE_ALPHA) * smoothedVoltage);
+                    smoothedVoltage = (ShooterConfigurables.voltageAlpha * rawVolts) + ((1.0 - ShooterConfigurables.voltageAlpha) * smoothedVoltage);
                 }
 
                 // Read Battery for Compensation
@@ -134,21 +135,21 @@ public class TeleOpShooter {
 
                 // Calculate RPM (Range -> RPM)
                 double rangeFt = distIn / 12.0;
-                double slope = BjornConstants.Power.SHOOTER_RPM_SLOPE_RANGER;
-                double offset = BjornConstants.Power.SHOOTER_RPM_OFFSET_RANGER;
+                double slope = ShooterConfigurables.rpmSlopeRanger;
+                double offset = ShooterConfigurables.rpmOffsetRanger;
                 double calculatedRpm = (slope * rangeFt) + offset;
 
                 // Set Target
-                targetRpm = (int) Math.max(BjornConstants.Power.SHOOTER_MIN_RPM,
-                        Math.min(calculatedRpm, BjornConstants.Power.SHOOTER_MAX_RPM));
+                targetRpm = (int) Math.max(ShooterConfigurables.minRpm,
+                        Math.min(calculatedRpm, ShooterConfigurables.maxRpm));
             } else {
                  // Fallback if sensor missing but active
-                 targetRpm = IDLE_RPM; 
+                 targetRpm = ShooterConfigurables.idleRpm; 
             }
 
             setFlywheelRpm(targetRpm);
         } else if (idle) {
-            targetRpm = IDLE_RPM;
+            targetRpm = ShooterConfigurables.idleRpm;
             setFlywheelRpm(targetRpm);
         } else {
             targetRpm = 0;
