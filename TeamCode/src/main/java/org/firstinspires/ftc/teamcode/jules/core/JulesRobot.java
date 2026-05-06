@@ -44,7 +44,7 @@ public class JulesRobot {
 
     // Bridge Manager Fields
     private JulesBridgeManager bridgeManager;
-    private JulesStreamBus streamBus;
+    public JulesStreamBus streamBus;
     private JulesStreamBus.Subscription subscription;
 
     // Auto-stop timer: when > 0, stop motors after this epoch ms
@@ -85,6 +85,13 @@ public class JulesRobot {
         if (linkManager != null) {
             linkManager.stop();
         }
+    }
+
+    /**
+     * Compatibility hook for older OpModes.
+     */
+    public void start() {
+        publishManifest();
     }
 
     private void initHardware() {
@@ -457,8 +464,22 @@ public class JulesRobot {
                     double eh = args.has("endHeading") ? args.get("endHeading").getAsDouble() : 0;
                     double hd = args.has("heading") ? args.get("heading").getAsDouble() : 0;
                     boolean rev = args.has("reverse") && args.get("reverse").getAsBoolean();
-                    pathInterpreter.addSegment(pt, px, py, sh, eh, hd, rev);
-                    RobotLog.i(TAG, "Path interpreter: added " + pt + " segment");
+
+                    // Optional control points -> BezierCurve when present
+                    java.util.List<com.pedropathing.geometry.Pose> cps =
+                            new java.util.ArrayList<com.pedropathing.geometry.Pose>();
+                    if (args.has("controlPoints") && args.get("controlPoints").isJsonArray()) {
+                        com.google.gson.JsonArray cpArr = args.getAsJsonArray("controlPoints");
+                        for (int i = 0; i < cpArr.size(); i++) {
+                            com.google.gson.JsonObject cp = cpArr.get(i).getAsJsonObject();
+                            double cx = cp.has("x") ? cp.get("x").getAsDouble() : 0;
+                            double cy = cp.has("y") ? cp.get("y").getAsDouble() : 0;
+                            cps.add(new com.pedropathing.geometry.Pose(cx, cy));
+                        }
+                    }
+
+                    pathInterpreter.addSegment(pt, px, py, sh, eh, hd, rev, cps);
+                    RobotLog.i(TAG, "Path interpreter: added " + pt + " segment cps=" + cps.size());
                     return;
                 }
                 case "path_follow": {

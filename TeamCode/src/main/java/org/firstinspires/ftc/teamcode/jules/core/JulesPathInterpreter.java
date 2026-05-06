@@ -1,14 +1,15 @@
 package org.firstinspires.ftc.teamcode.jules.core;
 
 import com.pedropathing.follower.Follower;
+import com.pedropathing.geometry.BezierCurve;
 import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.geometry.Point;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.paths.PathBuilder;
 import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.util.RobotLog;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -18,9 +19,18 @@ import java.util.List;
  * paths.
  *
  * Usage flow:
- * 1. path_start -> reset()
- * 2. path_add -> addSegment(type, x, y, ...) (called N times)
+ * 1. path_start  -> reset()
+ * 2. path_add    -> addSegment(...) (called N times, one per segment)
  * 3. path_follow -> execute(follower)
+ *
+ * Geometry:
+ *   - controlPoints empty -> BezierLine(start, end)
+ *   - controlPoints size N -> BezierCurve(start, cp1, ..., cpN, end)  (Pedro variadic)
+ *
+ * Heading interpolation (per segment):
+ *   - "linear"     -> setLinearHeadingInterpolation(startDeg, endDeg)
+ *   - "tangential" -> setTangentHeadingInterpolation()  (+ optional setReversed)
+ *   - "constant"   -> setConstantHeadingInterpolation(headingDeg)
  */
 public class JulesPathInterpreter {
     private static final String TAG = "JulesPathInterpreter";
@@ -34,10 +44,12 @@ public class JulesPathInterpreter {
         public final double endHeading; // Linear only
         public final double heading; // Tangential / Constant
         public final boolean reverse; // Tangential only
+        public final List<Pose> controlPoints; // [] = line, else Bezier of order N+1
 
         public Segment(String type, double x, double y,
                 double startHeading, double endHeading,
-                double heading, boolean reverse) {
+                double heading, boolean reverse,
+                List<Pose> controlPoints) {
             this.type = type;
             this.x = x;
             this.y = y;
@@ -45,6 +57,9 @@ public class JulesPathInterpreter {
             this.endHeading = endHeading;
             this.heading = heading;
             this.reverse = reverse;
+            this.controlPoints = (controlPoints == null)
+                    ? Collections.<Pose>emptyList()
+                    : controlPoints;
         }
     }
 
@@ -58,16 +73,25 @@ public class JulesPathInterpreter {
         RobotLog.i(TAG, "Path interpreter reset - ready for segments");
     }
 
-    /** Add a segment to the current path. */
+    /** Add a straight (BezierLine) segment — backward-compatible overload. */
     public void addSegment(String type, double x, double y,
             double startHeading, double endHeading,
             double heading, boolean reverse) {
+        addSegment(type, x, y, startHeading, endHeading, heading, reverse, null);
+    }
+
+    /** Add a segment to the current path (line or bezier curve). */
+    public void addSegment(String type, double x, double y,
+            double startHeading, double endHeading,
+            double heading, boolean reverse,
+            List<Pose> controlPoints) {
         if (!pathActive) {
-            // Auto-start if not explicitly started
             reset();
         }
-        segments.add(new Segment(type, x, y, startHeading, endHeading, heading, reverse));
-        RobotLog.i(TAG, "Added segment: " + type + " (" + x + ", " + y + ")");
+        segments.add(new Segment(type, x, y, startHeading, endHeading,
+                heading, reverse, controlPoints));
+        int cps = (controlPoints == null) ? 0 : controlPoints.size();
+        RobotLog.i(TAG, "Added segment: " + type + " (" + x + ", " + y + ") cps=" + cps);
     }
 
     /** Build and execute the accumulated path chain on the given follower. */
@@ -87,15 +111,27 @@ public class JulesPathInterpreter {
                 currentPose = new Pose(0, 0, 0);
             }
 
-            // Start building from current pose
             PathBuilder builder = follower.pathBuilder();
-            Point lastPoint = new Point(currentPose.getX(), currentPose.getY());
+            Pose lastPoint = new Pose(currentPose.getX(), currentPose.getY(), currentPose.getHeading());
 
             for (Segment seg : segments) {
-                Point endPoint = new Point(seg.x, seg.y);
-                builder.addPath(new BezierLine(lastPoint, endPoint));
+                Pose endPoint = new Pose(seg.x, seg.y, currentPose.getHeading());
 
-                // Apply heading interpolation based on type
+                // Geometry: line vs bezier curve
+                if (seg.controlPoints == null || seg.controlPoints.isEmpty()) {
+                    builder.addPath(new BezierLine(lastPoint, endPoint));
+                } else {
+                    // BezierCurve takes variadic Point... — start, cps..., end
+                    Pose[] pts = new Pose[seg.controlPoints.size() + 2];
+                    pts[0] = lastPoint;
+                    for (int i = 0; i < seg.controlPoints.size(); i++) {
+                        pts[i + 1] = seg.controlPoints.get(i);
+                    }
+                    pts[pts.length - 1] = endPoint;
+                    builder.addPath(new BezierCurve(pts));
+                }
+
+                // Heading interpolation
                 switch (seg.type.toLowerCase()) {
                     case "linear":
                         builder.setLinearHeadingInterpolation(
@@ -105,7 +141,7 @@ public class JulesPathInterpreter {
                     case "tangential":
                         builder.setTangentHeadingInterpolation();
                         if (seg.reverse) {
-                            builder.setReversed(true);
+                            builder.setReversed();
                         }
                         break;
                     case "constant":
@@ -124,7 +160,6 @@ public class JulesPathInterpreter {
             follower.followPath(chain, true);
             RobotLog.i(TAG, "Path chain built & following (" + segments.size() + " segments)");
 
-            // Clear after execution
             segments.clear();
             pathActive = false;
             return true;
