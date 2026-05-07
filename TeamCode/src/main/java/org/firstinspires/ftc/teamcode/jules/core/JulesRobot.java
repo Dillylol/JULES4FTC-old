@@ -50,6 +50,8 @@ public class JulesRobot {
     // Auto-stop timer: when > 0, stop motors after this epoch ms
     public long driveStopTime = 0;
 
+    private boolean lastPedroBusy = false;
+
     private com.qualcomm.robotcore.eventloop.opmode.OpMode opMode;
 
     public JulesRobot(com.qualcomm.robotcore.eventloop.opmode.OpMode opMode) {
@@ -82,6 +84,8 @@ public class JulesRobot {
     }
 
     public void stop() {
+        hardStopActuators();
+
         if (linkManager != null) {
             linkManager.stop();
         }
@@ -101,14 +105,22 @@ public class JulesRobot {
             rightFront = hardwareMap.tryGet(DcMotor.class, JulesConstants.Motors.FRONT_RIGHT);
             rightRear = hardwareMap.tryGet(DcMotor.class, JulesConstants.Motors.BACK_RIGHT);
 
-            if (leftFront != null)
+            if (leftFront != null) {
                 leftFront.setDirection(JulesConstants.Motors.FRONT_LEFT_DIR);
-            if (leftRear != null)
+                leftFront.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            }
+            if (leftRear != null) {
                 leftRear.setDirection(JulesConstants.Motors.BACK_LEFT_DIR);
-            if (rightFront != null)
+                leftRear.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            }
+            if (rightFront != null) {
                 rightFront.setDirection(JulesConstants.Motors.FRONT_RIGHT_DIR);
-            if (rightRear != null)
+                rightFront.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            }
+            if (rightRear != null) {
                 rightRear.setDirection(JulesConstants.Motors.BACK_RIGHT_DIR);
+                rightRear.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            }
 
             // Battery compensation
             for (VoltageSensor sensor : hardwareMap.getAll(VoltageSensor.class)) {
@@ -235,12 +247,49 @@ public class JulesRobot {
             rightRear.setPower(rr);
     }
 
+    /**
+     * Manual drive/motor commands must be able to take control immediately.
+     * Pedro can keep issuing drivetrain commands unless we explicitly break following.
+     */
+    private void preemptPedroControl() {
+        if (follower != null) {
+            try {
+                follower.breakFollowing();
+            } catch (Exception ignored) {}
+        }
+        pathInterpreter.reset();
+    }
+
+    /**
+     * Force full dead-stick on robot actuators.
+     */
+    private void hardStopActuators() {
+        preemptPedroControl();
+        setDrivePowers(0, 0, 0, 0);
+        driveStopTime = 0;
+
+        for (DcMotor m : scanner.motors.values()) {
+            try { m.setPower(0); } catch (Exception ignored) {}
+        }
+        for (com.qualcomm.robotcore.hardware.CRServo cr : scanner.crServos.values()) {
+            try { cr.setPower(0); } catch (Exception ignored) {}
+        }
+    }
+
     public void publish(String json) {
         if (bridgeManager != null && streamBus != null) {
             streamBus.publishJsonLine(json);
         } else if (linkManager != null) {
             linkManager.sendNdjson(json);
         }
+    }
+
+    public void sendLog(String level, String msg) {
+        com.google.gson.JsonObject log = new com.google.gson.JsonObject();
+        log.addProperty("type", "log");
+        log.addProperty("level", level);
+        log.addProperty("message", msg);
+        publish(log.toString());
     }
 
     public void publishManifest() {
@@ -321,21 +370,25 @@ public class JulesRobot {
                     double power = Double.parseDouble(parts[3].replace("P", ""));
                     switch (direction.toUpperCase()) {
                         case "FORWARD":
+                            preemptPedroControl();
                             setDrivePowers(power, power, power, power);
                             break;
                         case "BACKWARD":
+                            preemptPedroControl();
                             setDrivePowers(-power, -power, -power, -power);
                             break;
                         case "LEFT":
+                            preemptPedroControl();
                             setDrivePowers(-power, power, power, -power);
                             break;
                         case "RIGHT":
+                            preemptPedroControl();
                             setDrivePowers(power, -power, -power, power);
                             break;
                     }
                 }
             } else if ("STOP".equalsIgnoreCase(cmd)) {
-                setDrivePowers(0, 0, 0, 0);
+                hardStopActuators();
             }
         } catch (Exception e) {
             com.qualcomm.robotcore.util.RobotLog.e("JulesRobot", "Command error: " + e.getMessage());
@@ -347,8 +400,7 @@ public class JulesRobot {
      */
     public void checkAutoStop() {
         if (driveStopTime > 0 && System.currentTimeMillis() >= driveStopTime) {
-            setDrivePowers(0, 0, 0, 0);
-            driveStopTime = 0;
+            hardStopActuators();
         }
     }
 
@@ -363,6 +415,7 @@ public class JulesRobot {
 
             // Handle "type": "motor"/"servo" (Low-Level)
             if ("motor".equals(type)) {
+                preemptPedroControl();
                 String id = cmd.has("id") ? cmd.get("id").getAsString() : "";
                 DcMotor motor = scanner.getMotor(id);
                 if (motor != null) {
@@ -382,6 +435,7 @@ public class JulesRobot {
                 }
                 return;
             } else if ("servo".equals(type)) {
+                preemptPedroControl();
                 String id = cmd.has("id") ? cmd.get("id").getAsString() : "";
                 com.qualcomm.robotcore.hardware.Servo servo = scanner.getServo(id);
                 if (servo != null) {
@@ -413,6 +467,7 @@ public class JulesRobot {
 
             switch (name.toLowerCase()) {
                 case "drive": {
+                    preemptPedroControl();
                     double t = args.has("t") ? args.get("t").getAsDouble() : 0.0;
                     double p = args.has("p") ? args.get("p").getAsDouble() : 0.0;
                     double s = args.has("s") ? args.get("s").getAsDouble() : 0.0;
@@ -427,6 +482,7 @@ public class JulesRobot {
                     break;
                 }
                 case "strafe": {
+                    preemptPedroControl();
                     double speed = args.has("speed") ? args.get("speed").getAsDouble() : 0.4;
                     // Strafe: positive speed = right, negative = left
                     // Mecanum strafe right: LF-, LR+, RF+, RR-
@@ -434,6 +490,7 @@ public class JulesRobot {
                     break;
                 }
                 case "turn": {
+                    preemptPedroControl();
                     double speed = args.has("speed") ? args.get("speed").getAsDouble() : 0.3;
                     // Turn: positive speed = right, negative = left
                     // In-place turn right: LF-, LR-, RF+, RR+
@@ -441,8 +498,7 @@ public class JulesRobot {
                     break;
                 }
                 case "stop": {
-                    setDrivePowers(0, 0, 0, 0);
-                    driveStopTime = 0; // Cancel any pending auto-stop
+                    hardStopActuators();
                     return;
                 }
                 default:
@@ -452,7 +508,29 @@ public class JulesRobot {
             // ───── Path Commands (Pedro Pathing Dynamic) ─────
             switch (name.toLowerCase()) {
                 case "path_start": {
+                    // Seamless handoff to a fresh Pedro program chain.
+                    if (follower != null) {
+                        try {
+                            follower.breakFollowing();
+                        } catch (Exception ignored) {}
+                    }
                     pathInterpreter.reset();
+                    driveStopTime = 0;
+
+                    // Optional explicit start pose from app (x, y, headingDeg).
+                    // Accepts aliases so app payloads can evolve safely.
+                    boolean hasStart = args.has("x") || args.has("startX");
+                    if (hasStart) {
+                        double sx = args.has("x") ? args.get("x").getAsDouble()
+                                : args.get("startX").getAsDouble();
+                        double sy = args.has("y") ? args.get("y").getAsDouble()
+                                : args.get("startY").getAsDouble();
+                        double sh = args.has("heading") ? args.get("heading").getAsDouble()
+                                : (args.has("startHeading") ? args.get("startHeading").getAsDouble()
+                                : (args.has("startDeg") ? args.get("startDeg").getAsDouble() : 0));
+                        pathInterpreter.setStartPose(sx, sy, sh);
+                    }
+
                     RobotLog.i(TAG, "Path interpreter: reset");
                     return;
                 }
@@ -464,6 +542,14 @@ public class JulesRobot {
                     double eh = args.has("endHeading") ? args.get("endHeading").getAsDouble() : 0;
                     double hd = args.has("heading") ? args.get("heading").getAsDouble() : 0;
                     boolean rev = args.has("reverse") && args.get("reverse").getAsBoolean();
+
+                    // First data-point support: allow a dedicated start marker entry.
+                    // { name:"path_add", args:{ pathType:"start", x, y, heading } }
+                    if ("start".equalsIgnoreCase(pt) || "start_pose".equalsIgnoreCase(pt)) {
+                        pathInterpreter.setStartPose(px, py, hd);
+                        RobotLog.i(TAG, "Path interpreter: start pose marker accepted");
+                        return;
+                    }
 
                     // Optional control points -> BezierCurve when present
                     java.util.List<com.pedropathing.geometry.Pose> cps =
@@ -484,7 +570,17 @@ public class JulesRobot {
                 }
                 case "path_follow": {
                     if (follower != null) {
+                        // If another path was running, swap to the new one immediately.
+                        try {
+                            follower.breakFollowing();
+                        } catch (Exception ignored) {}
                         boolean ok = pathInterpreter.execute(follower);
+                        RobotLog.i(TAG, "Path interpreter: execute() returned " + ok);
+                        sendLog("info", "Path interpreter: execute() returned " + ok);
+                        if (ok) {
+                            lastPedroBusy = true; // Path started
+                            sendLog("info", "Path started, waiting for completion");
+                        }
                         RobotLog.i(TAG, "Path interpreter: follow -> " + (ok ? "success" : "failed"));
                     } else {
                         RobotLog.w(TAG, "Path interpreter: follower is null, cannot execute");
@@ -513,6 +609,21 @@ public class JulesRobot {
     public void update() {
         if (follower != null) {
             follower.update();
+            boolean currentBusy = follower.isBusy();
+            if (lastPedroBusy != currentBusy) {
+                RobotLog.i(TAG, "Pedro busy state changed: " + lastPedroBusy + " -> " + currentBusy);
+            }
+            if (lastPedroBusy && !currentBusy) {
+                // Path just finished
+                sendLog("info", "Path finished!");
+                com.google.gson.JsonObject event = new com.google.gson.JsonObject();
+                event.addProperty("type", "event");
+                event.addProperty("event", "path_done");
+                event.addProperty("ts_ms", System.currentTimeMillis());
+                publish(event.toString());
+                RobotLog.i(TAG, "Pedro Path Done - Event Published");
+            }
+            lastPedroBusy = currentBusy;
         }
     }
 
