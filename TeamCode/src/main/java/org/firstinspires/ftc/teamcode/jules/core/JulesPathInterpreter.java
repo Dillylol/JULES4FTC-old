@@ -66,11 +66,35 @@ public class JulesPathInterpreter {
     private final List<Segment> segments = new ArrayList<>();
     private boolean pathActive = false;
 
+    /**
+     * Optional path origin from the app ({@code path_start} or {@code path_add} start marker).
+     * Heading is degrees (same as segment heading fields); converted to radians for Pedro {@link Pose}.
+     */
+    private boolean hasExplicitStartPose = false;
+    private double explicitStartX;
+    private double explicitStartY;
+    private double explicitStartHeadingDeg;
+
     /** Reset builder for a new path chain. */
     public void reset() {
         segments.clear();
         pathActive = true;
+        hasExplicitStartPose = false;
         RobotLog.i(TAG, "Path interpreter reset - ready for segments");
+    }
+
+    /**
+     * Sets the pose used as the first point of the chain when {@link #execute(Follower)} runs,
+     * instead of {@link Follower#getPose()}. Also syncs the follower via {@code setPose}.
+     *
+     * @param headingDeg field-heading style degrees (consistent with path segment JSON)
+     */
+    public void setStartPose(double x, double y, double headingDeg) {
+        explicitStartX = x;
+        explicitStartY = y;
+        explicitStartHeadingDeg = headingDeg;
+        hasExplicitStartPose = true;
+        RobotLog.i(TAG, "Explicit start pose: (" + x + ", " + y + ") headingDeg=" + headingDeg);
     }
 
     /** Add a straight (BezierLine) segment — backward-compatible overload. */
@@ -106,9 +130,17 @@ public class JulesPathInterpreter {
         }
 
         try {
-            Pose currentPose = follower.getPose();
-            if (currentPose == null) {
-                currentPose = new Pose(0, 0, 0);
+            Pose currentPose;
+            if (hasExplicitStartPose) {
+                currentPose = new Pose(explicitStartX, explicitStartY,
+                        Math.toRadians(explicitStartHeadingDeg));
+                follower.setPose(currentPose);
+                hasExplicitStartPose = false;
+            } else {
+                currentPose = follower.getPose();
+                if (currentPose == null) {
+                    currentPose = new Pose(0, 0, 0);
+                }
             }
 
             PathBuilder builder = follower.pathBuilder();

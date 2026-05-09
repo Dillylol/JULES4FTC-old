@@ -51,6 +51,10 @@ public class TurretControl {
     private com.pedropathing.geometry.Pose currentRobotPose = null;
     private boolean positionTrackingEnabled = false;
 
+    /** Previous camera/manual setpoint for rate feedforward (same frame as {@link #targetFieldHeading}). */
+    private double lastTrackingTargetDeg = 0.0;
+    private boolean trackingTargetFfPrimed = false;
+
     /**
      * Constructs a new TurretControl instance.
      * 
@@ -120,7 +124,19 @@ public class TurretControl {
                 : TurretConfigurables.robotRotationFFGain;
         double ff = robotRate * ffGain;
 
-        double turretPower = pid + ff;
+        double cameraTargetRateFf = 0.0;
+        if (positionTrackingEnabled && dt > 0.0) {
+            if (!trackingTargetFfPrimed) {
+                lastTrackingTargetDeg = targetFieldHeading;
+                trackingTargetFfPrimed = true;
+            } else {
+                double targetRateDegPerSec = (targetFieldHeading - lastTrackingTargetDeg) / dt;
+                lastTrackingTargetDeg = targetFieldHeading;
+                cameraTargetRateFf = targetRateDegPerSec * TurretConfigurables.cameraKff;
+            }
+        }
+
+        double turretPower = pid + ff + cameraTargetRateFf;
         lastTurretError = error;
 
         // === Standard Limit Enforcement ===
@@ -214,6 +230,9 @@ public class TurretControl {
      */
     public void setPositionTrackingEnabled(boolean enabled) {
         this.positionTrackingEnabled = enabled;
+        if (!enabled) {
+            trackingTargetFfPrimed = false;
+        }
     }
 
     /**

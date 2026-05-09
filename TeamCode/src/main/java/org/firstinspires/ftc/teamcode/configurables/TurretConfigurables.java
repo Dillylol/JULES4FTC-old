@@ -80,6 +80,10 @@ public class TurretConfigurables {
 
     @Sorter(sort = 62)
     public static double cameraCorrectionGain = 1.0; // Scale factor for camera bearing error
+
+    /** Feedforward on camera-tracking setpoint rate (deg/s → motor power). */
+    @Sorter(sort = 63)
+    public static double cameraKff = 0.004;
     
     // Calculated property (DO NOT TUNE DIRECTLY)
     public static double getTicksPerDegree() {
